@@ -1,0 +1,48 @@
+# Logs
+logs/
+*.log
+
+# Data directories (contain blockchain data)
+mainnet/data/
+testnet/data/
+
+# Docker
+.docker/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Node modules (if any)
+node_modules/
+
+# Build artifacts
+dist/
+build/
+
+# Docker images (optional - uncomment if you don't want to track)
+# *.tar
+# libre-node:* 

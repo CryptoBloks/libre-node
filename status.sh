@@ -1,0 +1,18 @@
+#!/bin/bash
+echo "=== Libre Blockchain Nodes Status ==="
+echo ""
+echo "Docker containers:"
+docker-compose ps
+echo ""
+echo "Libre Mainnet Info:"
+curl -s http://localhost:9888/v1/chain/get_info | jq '.' 2>/dev/null || echo "Mainnet node not responding"
+echo ""
+echo "Libre Testnet Info:"
+curl -s http://localhost:9889/v1/chain/get_info | jq '.' 2>/dev/null || echo "Testnet node not responding"
+echo ""
+echo "P2P Connection Status:"
+echo "Mainnet peers:"
+curl -s http://localhost:9888/v1/net/connections | jq '.[].peer' 2>/dev/null || echo "Cannot fetch mainnet peers"
+echo ""
+echo "Testnet peers:"
+curl -s http://localhost:9889/v1/net/connections | jq '.[].peer' 2>/dev/null || echo "Cannot fetch testnet peers"
