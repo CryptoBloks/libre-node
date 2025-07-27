@@ -29,9 +29,27 @@ RUN useradd -m -s /bin/bash eosio \
     && mkdir -p /opt/eosio/config/protocol_features \
     && chown -R eosio:eosio /opt/eosio
 
-# Switch to eosio user
-USER eosio
+# Create entrypoint script to handle volume permissions
+RUN echo '#!/bin/bash\n\
+# Ensure data directories exist and have correct permissions\n\
+mkdir -p /opt/eosio/data/state\n\
+mkdir -p /opt/eosio/data/state-history\n\
+mkdir -p /opt/eosio/config/protocol_features\n\
+chown -R eosio:eosio /opt/eosio/data\n\
+chown -R eosio:eosio /opt/eosio/config\n\
+# Switch to eosio user and execute the command\n\
+exec gosu eosio "$@"' > /entrypoint.sh \
+    && chmod +x /entrypoint.sh
+
+# Install gosu for proper user switching
+RUN apt-get update && apt-get install -y gosu && rm -rf /var/lib/apt/lists/*
+
+# Switch back to root for entrypoint
+USER root
 WORKDIR /opt/eosio
+
+# Set entrypoint
+ENTRYPOINT ["/entrypoint.sh"]
 
 # Expose ports
 EXPOSE 9888 9889 9876 9877 9080 9081

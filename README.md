@@ -5,6 +5,7 @@ This repository contains a Docker-based setup for running Libre blockchain nodes
 ## Overview
 
 Libre is a blockchain platform based on AntelopeIO technology. This setup provides:
+
 - **Libre Mainnet API Node** (Port 9888)
 - **Libre Testnet API Node** (Port 9889)
 - **State History Plugin (SHiP)** endpoints for both networks
@@ -21,17 +22,25 @@ Libre is a blockchain platform based on AntelopeIO technology. This setup provid
 ## Quick Start
 
 1. **Clone the repository:**
+
    ```bash
    git clone <repository-url>
    cd docker-libre-node
    ```
 
-2. **Build and start the nodes:**
+2. **Set up permissions (required for Docker volume mounts):**
+
+   ```bash
+   ./setup-permissions.sh
+   ```
+
+3. **Build and start the nodes:**
+
    ```bash
    ./start.sh
    ```
 
-3. **Check node status:**
+4. **Check node status:**
    ```bash
    ./status.sh
    ```
@@ -41,11 +50,13 @@ Libre is a blockchain platform based on AntelopeIO technology. This setup provid
 If you prefer to set up manually:
 
 1. **Build the Docker image:**
+
    ```bash
    ./build.sh
    ```
 
 2. **Start the nodes:**
+
    ```bash
    docker-compose up -d
    ```
@@ -60,44 +71,48 @@ If you prefer to set up manually:
 
 ### Network Information
 
-| Network | Chain ID | API Port | P2P Port | SHiP Port |
-|---------|----------|----------|----------|-----------|
-| Mainnet | `38b1d7815474d0bf271d659c50b579893768b3b2c3dc6a14c4be6a7b3e14f2fb` | 9888 | 9876 | 9080 |
-| Testnet | `b64646740308df2ee06c6b72f34c0f7fa066d940e831f752db2006fcc2b78dee` | 9889 | 9877 | 9081 |
+| Network | Chain ID                                                           | API Port | P2P Port | SHiP Port |
+| ------- | ------------------------------------------------------------------ | -------- | -------- | --------- |
+| Mainnet | `38b1d7815474d0bf271d659c50b579893768b3b2c3dc6a14c4be6a7b3e14f2fb` | 9888     | 9876     | 9080      |
+| Testnet | `b64646740308df2ee06c6b72f34c0f7fa066d940e831f752db2006fcc2b78dee` | 9889     | 9877     | 9081      |
 
 ### P2P Peers
 
 **Mainnet:**
+
 - `p2p.libre.iad.cryptobloks.io:9876`
 - `p2p.libre.pdx.cryptobloks.io:9876`
 
 **Testnet:**
+
 - `p2p.testnet.libre.iad.cryptobloks.io:9876`
 - `p2p.testnet.libre.pdx.cryptobloks.io:9876`
 
 ## API Endpoints
 
 ### Mainnet
+
 - **HTTP API:** http://localhost:9888
 - **State History:** ws://localhost:9080
 - **Node Info:** http://localhost:9888/v1/chain/get_info
 
 ### Testnet
+
 - **HTTP API:** http://localhost:9889
 - **State History:** ws://localhost:9081
 - **Node Info:** http://localhost:9889/v1/chain/get_info
 
 ## Management Scripts
 
-| Script | Description |
-|--------|-------------|
-| `start.sh` | Start both nodes (builds image if needed) |
-| `stop.sh` | Stop both nodes |
-| `restart.sh` | Restart both nodes |
-| `logs.sh` | View logs (mainnet\|testnet) |
-| `status.sh` | Check node status and connectivity |
-| `reset.sh` | Reset node data (WARNING: deletes all data) |
-| `build.sh` | Build Docker image manually |
+| Script       | Description                                 |
+| ------------ | ------------------------------------------- |
+| `start.sh`   | Start both nodes (builds image if needed)   |
+| `stop.sh`    | Stop both nodes                             |
+| `restart.sh` | Restart both nodes                          |
+| `logs.sh`    | View logs (mainnet\|testnet)                |
+| `status.sh`  | Check node status and connectivity          |
+| `reset.sh`   | Reset node data (WARNING: deletes all data) |
+| `build.sh`   | Build Docker image manually                 |
 
 ## Directory Structure
 
@@ -125,6 +140,7 @@ docker-libre-node/
 ### Node Configuration (`config.ini`)
 
 Key configuration options:
+
 - **Chain ID:** Network identifier
 - **HTTP Server:** API endpoint configuration
 - **P2P Settings:** Peer connectivity
@@ -135,6 +151,7 @@ Key configuration options:
 ### Genesis Files
 
 Contains initial blockchain state:
+
 - **Initial Timestamp:** Genesis block time
 - **Initial Key:** Genesis block producer key
 - **Initial Configuration:** Network parameters
@@ -144,18 +161,21 @@ Contains initial blockchain state:
 ### Common Issues
 
 1. **Port conflicts:**
+
    ```bash
    # Check if ports are in use
    netstat -tulpn | grep -E ':(9888|9889|9876|9877|9080|9081)'
    ```
 
 2. **Insufficient memory:**
+
    ```bash
    # Check available memory
    free -h
    ```
 
 3. **Slow sync:**
+
    - Ensure stable internet connection
    - Check peer connectivity
    - Monitor system resources
@@ -193,6 +213,7 @@ docker-compose logs -f
 ### Resource Allocation
 
 The default configuration is optimized for:
+
 - **4 CPU cores** for chain processing
 - **6 HTTP threads** for API requests
 - **16GB RAM** for mainnet state
@@ -201,6 +222,7 @@ The default configuration is optimized for:
 ### Customization
 
 Edit `docker-compose.yml` to adjust:
+
 - CPU/memory limits
 - Port mappings
 - Volume mounts
@@ -228,6 +250,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Support
 
 For issues and questions:
+
 - Check the troubleshooting section
 - Review Libre blockchain documentation
 - Open an issue on GitHub
@@ -235,8 +258,9 @@ For issues and questions:
 ## Changelog
 
 ### v1.0.0
+
 - Initial release
 - Libre mainnet and testnet support
 - AntelopeIO Leap v5.0.3
 - State History Plugin support
-- Comprehensive management scripts 
+- Comprehensive management scripts
