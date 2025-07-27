@@ -4,14 +4,14 @@ echo "Starting Libre Blockchain nodes..."
 # Check if permissions are set up correctly
 if [ ! -w "mainnet/data" ] || [ ! -w "testnet/data" ]; then
     echo "⚠️  Warning: Data directories may not have correct permissions."
-    echo "   Run './setup-permissions.sh' if you encounter permission errors."
+    echo "   Run '../setup-permissions.sh' if you encounter permission errors."
     echo ""
 fi
 
 # Check if Docker image exists, build if not
 if ! docker images | grep -q "libre-node.*5.0.3"; then
     echo "Docker image not found. Building..."
-    ./build.sh
+    ../build.sh
 fi
 
 docker-compose up -d

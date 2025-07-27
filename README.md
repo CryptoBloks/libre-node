@@ -37,12 +37,12 @@ Libre is a blockchain platform based on AntelopeIO technology. This setup provid
 3. **Build and start the nodes:**
 
    ```bash
-   ./start.sh
+   ./scripts/start.sh
    ```
 
 4. **Check node status:**
    ```bash
-   ./status.sh
+   ./scripts/status.sh
    ```
 
 ## Manual Setup
@@ -63,8 +63,8 @@ If you prefer to set up manually:
 
 3. **View logs:**
    ```bash
-   ./logs.sh mainnet    # Mainnet logs
-   ./logs.sh testnet    # Testnet logs
+   ./scripts/logs.sh mainnet    # Mainnet logs
+   ./scripts/logs.sh testnet    # Testnet logs
    ```
 
 ## Configuration
@@ -104,15 +104,15 @@ If you prefer to set up manually:
 
 ## Management Scripts
 
-| Script       | Description                                 |
-| ------------ | ------------------------------------------- |
-| `start.sh`   | Start both nodes (builds image if needed)   |
-| `stop.sh`    | Stop both nodes                             |
-| `restart.sh` | Restart both nodes                          |
-| `logs.sh`    | View logs (mainnet\|testnet)                |
-| `status.sh`  | Check node status and connectivity          |
-| `reset.sh`   | Reset node data (WARNING: deletes all data) |
-| `build.sh`   | Build Docker image manually                 |
+| Script               | Description                                 |
+| -------------------- | ------------------------------------------- |
+| `scripts/start.sh`   | Start both nodes (builds image if needed)   |
+| `scripts/stop.sh`    | Stop both nodes                             |
+| `scripts/restart.sh` | Restart both nodes                          |
+| `scripts/logs.sh`    | View logs (mainnet\|testnet)                |
+| `scripts/status.sh`  | Check node status and connectivity          |
+| `scripts/reset.sh`   | Reset node data (WARNING: deletes all data) |
+| `build.sh`           | Build Docker image manually                 |
 
 ## Directory Structure
 
@@ -120,6 +120,8 @@ If you prefer to set up manually:
 docker-libre-node/
 ├── Dockerfile                 # Custom Libre node image
 ├── docker-compose.yml         # Docker Compose configuration
+├── build.sh                   # Docker image build script
+├── setup-permissions.sh       # Permission setup script
 ├── mainnet/                   # Mainnet configuration
 │   ├── config/
 │   │   ├── config.ini        # Mainnet node configuration
@@ -133,6 +135,12 @@ docker-libre-node/
 │   ├── data/                 # Testnet blockchain data
 │   └── logs/                 # Testnet logs
 └── scripts/                   # Management scripts
+    ├── start.sh              # Start nodes
+    ├── stop.sh               # Stop nodes
+    ├── restart.sh            # Restart nodes
+    ├── status.sh             # Check status
+    ├── logs.sh               # View logs
+    └── reset.sh              # Reset data
 ```
 
 ## Configuration Files
@@ -192,7 +200,7 @@ Contains initial blockchain state:
 ⚠️ **WARNING:** This will delete all blockchain data and require full resync.
 
 ```bash
-./reset.sh
+./scripts/reset.sh
 ```
 
 ### View Detailed Logs

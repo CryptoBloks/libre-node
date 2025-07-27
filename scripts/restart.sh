@@ -1,6 +1,7 @@
 #!/bin/bash
 
 echo "Restarting Libre Blockchain nodes..."
+cd "$(dirname "$0")/.."
 docker-compose restart
 echo "Waiting for nodes to restart..."
 sleep 10

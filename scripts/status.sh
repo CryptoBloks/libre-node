@@ -1,6 +1,7 @@
 #!/bin/bash
 echo "=== Libre Blockchain Nodes Status ==="
 echo ""
+cd "$(dirname "$0")/.."
 echo "Docker containers:"
 docker-compose ps
 echo ""

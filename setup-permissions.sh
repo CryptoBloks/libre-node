@@ -35,4 +35,4 @@ sudo chmod -R 755 testnet/
 echo "✅ Permissions set successfully!"
 echo ""
 echo "You can now start the nodes with:"
-echo "  ./start.sh" 
+echo "  ./scripts/start.sh" 
