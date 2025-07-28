@@ -34,13 +34,23 @@ Libre is a blockchain platform based on AntelopeIO technology. This setup provid
    ./setup-permissions.sh
    ```
 
-3. **Build and start the nodes:**
+3. **Configure the nodes (recommended):**
+
+   ```bash
+   # Basic configuration (network settings only)
+   ./scripts/deploy.sh
+
+   # OR Advanced configuration (all settings)
+   ./scripts/deploy-advanced.sh
+   ```
+
+4. **Build and start the nodes:**
 
    ```bash
    ./scripts/start.sh
    ```
 
-4. **Check node status:**
+5. **Check node status:**
    ```bash
    ./scripts/status.sh
    ```
@@ -68,6 +78,30 @@ If you prefer to set up manually:
    ```
 
 ## Configuration
+
+### Deployment Scripts
+
+The repository includes two deployment scripts for configuring nodes:
+
+#### Basic Deployment (`deploy.sh`)
+
+- Configures network settings (IP addresses, ports, P2P peers)
+- Suitable for most users
+- Quick setup with sensible defaults
+
+#### Advanced Deployment (`deploy-advanced.sh`)
+
+- Configures all available settings
+- Performance tuning options
+- Logging and security settings
+- Database configuration
+- Suitable for production deployments
+
+#### Configuration Template (`config-template.sh`)
+
+- Shows all available configuration options
+- Provides recommendations for different use cases
+- Reference for manual configuration
 
 ### Network Information
 
@@ -104,15 +138,18 @@ If you prefer to set up manually:
 
 ## Management Scripts
 
-| Script               | Description                                 |
-| -------------------- | ------------------------------------------- |
-| `scripts/start.sh`   | Start both nodes (builds image if needed)   |
-| `scripts/stop.sh`    | Stop both nodes                             |
-| `scripts/restart.sh` | Restart both nodes                          |
-| `scripts/logs.sh`    | View logs (mainnet\|testnet)                |
-| `scripts/status.sh`  | Check node status and connectivity          |
-| `scripts/reset.sh`   | Reset node data (WARNING: deletes all data) |
-| `build.sh`           | Build Docker image manually                 |
+| Script                       | Description                                        |
+| ---------------------------- | -------------------------------------------------- |
+| `scripts/deploy.sh`          | Basic node configuration (network settings)        |
+| `scripts/deploy-advanced.sh` | Advanced node configuration (all settings)         |
+| `scripts/config-template.sh` | Show all configuration options and recommendations |
+| `scripts/start.sh`           | Start both nodes (builds image if needed)          |
+| `scripts/stop.sh`            | Stop both nodes                                    |
+| `scripts/restart.sh`         | Restart both nodes                                 |
+| `scripts/logs.sh`            | View logs (mainnet\|testnet)                       |
+| `scripts/status.sh`          | Check node status and connectivity                 |
+| `scripts/reset.sh`           | Reset node data (WARNING: deletes all data)        |
+| `build.sh`                   | Build Docker image manually                        |
 
 ## Directory Structure
 
@@ -135,6 +172,9 @@ docker-libre-node/
 │   ├── data/                 # Testnet blockchain data
 │   └── logs/                 # Testnet logs
 └── scripts/                   # Management scripts
+    ├── deploy.sh             # Basic configuration
+    ├── deploy-advanced.sh    # Advanced configuration
+    ├── config-template.sh    # Configuration reference
     ├── start.sh              # Start nodes
     ├── stop.sh               # Stop nodes
     ├── restart.sh            # Restart nodes
@@ -149,12 +189,21 @@ docker-libre-node/
 
 Key configuration options:
 
-- **Chain ID:** Network identifier
-- **HTTP Server:** API endpoint configuration
-- **P2P Settings:** Peer connectivity
-- **Plugin Configuration:** Enabled plugins
-- **Performance Tuning:** Resource allocation
-- **State History:** Historical data access
+- **Network Settings:** HTTP server, P2P endpoints, state history
+- **Performance Tuning:** Chain threads, HTTP threads, transaction timeouts
+- **Database Configuration:** Chain state size, client limits
+- **Logging Settings:** Console output, verbose errors, startup behavior
+- **Security Settings:** Pause on startup, host validation
+- **P2P Configuration:** Peer addresses, connection limits
+
+### Configuration Management
+
+All configuration is now centralized in the `config.ini` files. The `docker-compose.yml` file no longer contains redundant settings and only manages:
+
+- Container configuration
+- Port mappings
+- Volume mounts
+- Network settings
 
 ### Genesis Files
 
@@ -229,12 +278,19 @@ The default configuration is optimized for:
 
 ### Customization
 
-Edit `docker-compose.yml` to adjust:
+Use the deployment scripts to configure:
 
-- CPU/memory limits
-- Port mappings
-- Volume mounts
-- Environment variables
+- **Network settings:** IP addresses, ports, P2P peers
+- **Performance tuning:** Thread counts, timeouts, database sizes
+- **Logging options:** Console output, error verbosity
+- **Security settings:** Startup behavior, validation
+
+For manual customization, edit the `config.ini` files directly:
+
+- `mainnet/config/config.ini` for mainnet settings
+- `testnet/config/config.ini` for testnet settings
+
+The `docker-compose.yml` file manages container configuration only.
 
 ## Security Considerations
 
@@ -264,6 +320,18 @@ For issues and questions:
 - Open an issue on GitHub
 
 ## Changelog
+
+### v1.1.0
+
+- **Configuration Management:** Centralized all settings in `config.ini` files
+- **Deployment Scripts:** Added interactive configuration scripts
+  - `deploy.sh` for basic network configuration
+  - `deploy-advanced.sh` for comprehensive settings
+  - `config-template.sh` for configuration reference
+- **Redundancy Removal:** Eliminated duplicate settings between `docker-compose.yml` and `config.ini`
+- **Validation:** Added input validation and configuration checks
+- **Backup System:** Automatic backup creation with timestamps
+- **Documentation:** Updated README with new configuration process
 
 ### v1.0.0
 

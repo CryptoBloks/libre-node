@@ -10,17 +10,6 @@ services:
       --config-dir /opt/eosio/config
       --data-dir /opt/eosio/data
       --genesis-json /opt/eosio/config/genesis.json
-      --http-server-address=0.0.0.0:9888
-      --p2p-listen-endpoint=0.0.0.0:9876
-      --p2p-peer-address=p2p.libre.iad.cryptobloks.io:9876
-      --p2p-peer-address=p2p.libre.pdx.cryptobloks.io:9876
-      --state-history-endpoint=0.0.0.0:9080
-      --contracts-console
-      --verbose-http-errors
-      --max-transaction-time=1000
-      --abi-serializer-max-time-ms=2000
-      --chain-threads=4
-      --http-threads=6
     ports:
       - "9888:9888"
       - "9876:9876"
@@ -44,17 +33,6 @@ services:
       --config-dir /opt/eosio/config
       --data-dir /opt/eosio/data
       --genesis-json /opt/eosio/config/genesis.json
-      --http-server-address=0.0.0.0:9889
-      --p2p-listen-endpoint=0.0.0.0:9877
-      --p2p-peer-address=p2p.testnet.libre.iad.cryptobloks.io:9876
-      --p2p-peer-address=p2p.testnet.libre.pdx.cryptobloks.io:9876
-      --state-history-endpoint=0.0.0.0:9081
-      --contracts-console
-      --verbose-http-errors
-      --max-transaction-time=1000
-      --abi-serializer-max-time-ms=2000
-      --chain-threads=4
-      --http-threads=6
     ports:
       - "9889:9889"
       - "9877:9877"

@@ -6,6 +6,10 @@ logs/
 mainnet/data/
 testnet/data/
 
+# protocol_features directories
+mainnet/protocol_features/
+testnet/protocol_features/
+
 # Docker
 .docker/
 
