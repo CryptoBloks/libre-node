@@ -106,11 +106,7 @@ plugin = eosio::net_plugin
 #plugin = eosio::producer_api_plugin
 
 # Chain Configuration - Lightweight
-chain-state-db-size-mb = 4096
-
-# EOS VM Configuration - Disable OC for lightweight mode
-wasm-runtime = eos-vm
-eos-vm-oc-enable = none
+chain-state-db-size-mb = 16384
 
 # Snapshot-based startup (lightweight mode)
 # Note: snapshot must be specified via command line, not config file
@@ -265,7 +261,7 @@ configure_producer() {
     sed -i.bak 's/^#blocks-log-stride = 1000/blocks-log-stride = 1000/' "$config_file"
     sed -i.bak 's/^#max-retained-block-files = 1/max-retained-block-files = 1/' "$config_file"
     sed -i.bak 's/^#blocks-retained-dir = retained/blocks-retained-dir = retained/' "$config_file"
-    sed -i.bak 's/^#chain-state-db-size-mb = 4096/chain-state-db-size-mb = 4096/' "$config_file"
+    sed -i.bak 's/^#chain-state-db-size-mb = 4096/chain-state-db-size-mb = 16384/' "$config_file"
     sed -i.bak 's/^#read-mode = head/read-mode = head/' "$config_file"
     sed -i.bak 's/^#validation-mode = light/validation-mode = light/' "$config_file"
     
