@@ -80,6 +80,24 @@ configure_producer() {
     
     print_header "Configuring $network Producer Settings"
     
+    # Check if config file exists, create if missing
+    if [ ! -f "$config_file" ]; then
+        local config_dir=$(dirname "$config_file")
+        print_warning "Config file not found: $config_file"
+        print_status "Creating directory: $config_dir"
+        mkdir -p "$config_dir"
+        
+        # Check if template exists in the repository  
+        local template_config="$SCRIPT_DIR/../$network/config/config.ini"
+        if [ -f "$template_config" ]; then
+            print_status "Copying template from repository..."
+            cp "$template_config" "$config_file"
+        else
+            print_error "Config template not found. Please ensure the $network/config/config.ini file exists."
+            return 1
+        fi
+    fi
+    
     # Create backup
     create_backup "$config_file"
     
