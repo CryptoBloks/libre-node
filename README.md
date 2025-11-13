@@ -439,11 +439,11 @@ The system supports multiple snapshot providers configured in `config/snapshot-p
 
 **Adding Custom Providers:**
 
-Edit `config/snapshot-providers.conf` to add providers:
+To add your own snapshot provider, edit `config/snapshot-providers.conf`:
 ```bash
 # Format: PROVIDER_NAME|BASE_URL|PATH_PATTERN|FILE_PATTERN|COMPRESSION
-CUSTOM_MAINNET|https://your-snapshots.com|/libre-mainnet|.*\.bin\.gz$|gz
-CUSTOM_TESTNET|https://your-snapshots.com|/libre-testnet|.*\.bin\.gz$|gz
+YOURPROVIDER_MAINNET|https://your-snapshots.com|/path/to/mainnet|.*\.bin\.zst$|zst
+YOURPROVIDER_TESTNET|https://your-snapshots.com|/path/to/testnet|.*\.bin\.zst$|zst
 ```
 
 **Supported Compression Formats:**
