@@ -107,8 +107,19 @@ start_producer() {
     # Start the producer container
     print_status "Starting lightweight producer container..."
     
-    if ! docker-compose -f "$PROJECT_ROOT/docker/docker-compose-producer.yml" up -d "libre-$network-producer"; then
-        print_error "Failed to start producer container"
+    # Try docker compose first (newer), then docker-compose (older)
+    if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+        if ! docker compose -f "$PROJECT_ROOT/docker/docker-compose-producer.yml" up -d "libre-$network-producer"; then
+            print_error "Failed to start producer container"
+            return 1
+        fi
+    elif command -v docker-compose &> /dev/null; then
+        if ! docker-compose -f "$PROJECT_ROOT/docker/docker-compose-producer.yml" up -d "libre-$network-producer"; then
+            print_error "Failed to start producer container"
+            return 1
+        fi
+    else
+        print_error "Neither 'docker compose' nor 'docker-compose' command found"
         return 1
     fi
     
