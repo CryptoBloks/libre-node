@@ -38,10 +38,19 @@ print_header() {
 # Function to check if snapshot exists and download if missing
 check_snapshot() {
     local network=$1
-    local snapshot_path="$PROJECT_ROOT/$network/data/snapshot.bin"
+    local snapshots_dir="$PROJECT_ROOT/$network/data/snapshots"
+    local fallback_snapshot="$PROJECT_ROOT/$network/data/snapshot.bin"
     
-    if [ ! -f "$snapshot_path" ]; then
-        print_warning "Snapshot not found for $network. Downloading automatically..."
+    # Check for snapshots in snapshots directory first
+    if [ -d "$snapshots_dir" ] && [ -n "$(ls -A "$snapshots_dir"/*.bin 2>/dev/null)" ]; then
+        local latest_snapshot=$(ls -t "$snapshots_dir"/*.bin 2>/dev/null | head -n 1)
+        print_status "Found existing snapshot: $(basename "$latest_snapshot")"
+        return 0
+    elif [ -f "$fallback_snapshot" ]; then
+        print_status "Found fallback snapshot: snapshot.bin"
+        return 0
+    else
+        print_warning "No snapshots found for $network. Downloading automatically..."
         
         # Call the snapshot script directly to download
         if ! "$SCRIPT_DIR/producer-snapshot.sh" <<< "$([ "$network" = "mainnet" ] && echo "3" || echo "4")"; then
@@ -54,17 +63,26 @@ check_snapshot() {
     fi
     
     # Check snapshot age (warn if older than 24 hours)
-    local snapshot_timestamp
-    if stat -f %m "$snapshot_path" &>/dev/null; then
-        snapshot_timestamp=$(stat -f %m "$snapshot_path")
-    elif stat -c %Y "$snapshot_path" &>/dev/null; then
-        snapshot_timestamp=$(stat -c %Y "$snapshot_path")
+    local snapshot_to_check
+    if [ -d "$snapshots_dir" ] && [ -n "$(ls -A "$snapshots_dir"/*.bin 2>/dev/null)" ]; then
+        snapshot_to_check=$(ls -t "$snapshots_dir"/*.bin 2>/dev/null | head -n 1)
     else
-        snapshot_timestamp=$(date +%s)  # fallback to now
+        snapshot_to_check="$fallback_snapshot"
     fi
-    local snapshot_age=$(( ($(date +%s) - snapshot_timestamp) / 3600 ))
-    if [ $snapshot_age -gt 24 ]; then
-        print_warning "Snapshot is $snapshot_age hours old. Consider downloading a fresh one."
+    
+    if [ -f "$snapshot_to_check" ]; then
+        local snapshot_timestamp
+        if stat -f %m "$snapshot_to_check" &>/dev/null; then
+            snapshot_timestamp=$(stat -f %m "$snapshot_to_check")
+        elif stat -c %Y "$snapshot_to_check" &>/dev/null; then
+            snapshot_timestamp=$(stat -c %Y "$snapshot_to_check")
+        else
+            snapshot_timestamp=$(date +%s)  # fallback to now
+        fi
+        local snapshot_age=$(( ($(date +%s) - snapshot_timestamp) / 3600 ))
+        if [ $snapshot_age -gt 24 ]; then
+            print_warning "Snapshot is $snapshot_age hours old. Consider downloading a fresh one."
+        fi
     fi
     
     return 0
