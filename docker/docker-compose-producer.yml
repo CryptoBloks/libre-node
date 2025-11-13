@@ -37,6 +37,7 @@ services:
     environment:
       - PRODUCER_MODE=true
       - LIGHTWEIGHT=true
+      - NETWORK=mainnet
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9888/v1/chain/get_info"]
       interval: 30s
@@ -85,6 +86,7 @@ services:
     environment:
       - PRODUCER_MODE=true
       - LIGHTWEIGHT=true
+      - NETWORK=testnet
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9889/v1/chain/get_info"]
       interval: 30s
