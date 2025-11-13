@@ -54,7 +54,15 @@ check_snapshot() {
     fi
     
     # Check snapshot age (warn if older than 24 hours)
-    local snapshot_age=$(( ($(date +%s) - $(stat -f %m "$snapshot_path" 2>/dev/null || stat -c %Y "$snapshot_path")) / 3600 ))
+    local snapshot_timestamp
+    if stat -f %m "$snapshot_path" &>/dev/null; then
+        snapshot_timestamp=$(stat -f %m "$snapshot_path")
+    elif stat -c %Y "$snapshot_path" &>/dev/null; then
+        snapshot_timestamp=$(stat -c %Y "$snapshot_path")
+    else
+        snapshot_timestamp=$(date +%s)  # fallback to now
+    fi
+    local snapshot_age=$(( ($(date +%s) - snapshot_timestamp) / 3600 ))
     if [ $snapshot_age -gt 24 ]; then
         print_warning "Snapshot is $snapshot_age hours old. Consider downloading a fresh one."
     fi
