@@ -95,8 +95,9 @@ configure_producer() {
     
     case $auth_method in
         1)
-            print_error "private-key option is deprecated in nodeos v5.0+. Use signature-provider instead."
-            return 1
+            read -s -p "Enter private key: " private_key
+            echo
+            auth_config="private-key = $private_key"
             ;;
         2)
             read -p "Enter public key: " public_key
@@ -145,8 +146,12 @@ configure_producer() {
     
     # Configure producer settings
     sed -i.bak "s/^#producer-name = yourproducername/producer-name = $producer_name/" "$config_file"
-# Note: private-key option removed - only signature-provider supported in v5.0+
-    sed -i.bak "s/^# signature-provider = YOUR_PUBLIC_KEY=KEY:YOUR_PRIVATE_KEY/$auth_config/" "$config_file"
+    # Configure authentication (private-key or signature-provider)
+    if [[ $auth_config == private-key* ]]; then
+        sed -i.bak "s/^# private-key = YOUR_PRIVATE_KEY_HERE/$auth_config/" "$config_file"
+    else
+        sed -i.bak "s/^# signature-provider = YOUR_PUBLIC_KEY=KEY:YOUR_PRIVATE_KEY/$auth_config/" "$config_file"
+    fi
     sed -i.bak "s/^#enable-stale-production = false/enable-stale-production = $stale_production/" "$config_file"
     
     # Apply additional settings
@@ -178,8 +183,9 @@ configure_producer() {
     sed -i.bak 's/^chain-state-history/#chain-state-history/' "$config_file"
     sed -i.bak 's/^state-history-dir/#state-history-dir/' "$config_file"
     
-    # Remove any existing private-key entries (cleanup from old versions)
-    sed -i.bak '/^private-key = /d' "$config_file"
+    # Remove any duplicate private-key entries (cleanup from old versions)
+    # Keep only the first private-key line and remove duplicates
+    awk '!seen[$0] || !/^private-key = /' "$config_file" > "$config_file.tmp" && mv "$config_file.tmp" "$config_file"
     
     # Enable other producer settings
     sed -i.bak 's/^#max-transaction-time = 30/max-transaction-time = 30/' "$config_file"
