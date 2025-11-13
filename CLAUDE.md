@@ -188,12 +188,18 @@ docker-compose -f docker/docker-compose-producer.yml up -d
 ```
 
 **Lightweight Mode Features:**
-- Downloads fresh snapshots from https://snapshots.eosusa.io
+- Downloads fresh snapshots from configurable providers
 - Keeps only last 1000 blocks in memory
 - Uses 4GB state instead of 32GB
 - tmpfs (RAM) for blocks/state directories
 - Fast restart from snapshot (5-10 minutes)
 - Automatic pruning - no state accumulation
+
+**Snapshot Provider Configuration:**
+- Multiple providers supported in `config/snapshot-providers.conf`
+- Default: EOSUSA (https://snapshots.eosusa.io)
+- Supports multiple compression formats (zst, gz, bz2, xz)
+- Provider selection via interactive script options
 
 ## Troubleshooting
 

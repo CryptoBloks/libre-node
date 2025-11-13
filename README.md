@@ -429,10 +429,38 @@ For block producers who don't need full state history, use the lightweight mode 
 
 #### Snapshot Sources
 
+The system supports multiple snapshot providers configured in `config/snapshot-providers.conf`:
+
+**Default Provider (EOSUSA):**
 - **Mainnet**: https://snapshots.eosusa.io/snapshots/libre
 - **Testnet**: https://snapshots.eosusa.io/snapshots/libretestnet
+- Format: `.bin.zst` (zstandard compressed)
+- Updated daily
 
-Updated daily with compressed `.bin.zst` format.
+**Adding Custom Providers:**
+
+Edit `config/snapshot-providers.conf` to add providers:
+```bash
+# Format: PROVIDER_NAME|BASE_URL|PATH_PATTERN|FILE_PATTERN|COMPRESSION
+CUSTOM_MAINNET|https://your-snapshots.com|/libre-mainnet|.*\.bin\.gz$|gz
+CUSTOM_TESTNET|https://your-snapshots.com|/libre-testnet|.*\.bin\.gz$|gz
+```
+
+**Supported Compression Formats:**
+- `zst` - Zstandard (requires zstd)
+- `gz` - Gzip (requires gzip)  
+- `bz2` - Bzip2 (requires bzip2)
+- `xz` - XZ (requires xz)
+- `none` - Uncompressed
+
+**Provider Selection:**
+```bash
+# List available providers
+./scripts/producer-snapshot.sh  # Option 5: Show provider information
+
+# Select specific provider
+./scripts/producer-snapshot.sh  # Option 6: List providers and select
+```
 
 ## Security Considerations
 

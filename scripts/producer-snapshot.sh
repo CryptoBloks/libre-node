@@ -2,6 +2,7 @@
 
 # Libre Producer Snapshot Management Script
 # Downloads and loads snapshots for lightweight producer nodes
+# Supports multiple snapshot providers
 
 set -e
 
@@ -12,13 +13,11 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Snapshot URLs
-MAINNET_SNAPSHOT_URL="https://snapshots.eosusa.io/snapshots/libre"
-TESTNET_SNAPSHOT_URL="https://snapshots.eosusa.io/snapshots/libretestnet"
-
 # Default paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+CONFIG_DIR="$PROJECT_ROOT/config"
+PROVIDERS_CONFIG="$CONFIG_DIR/snapshot-providers.conf"
 
 # Function to print colored output
 print_status() {
@@ -39,42 +38,163 @@ print_header() {
     echo -e "${BLUE}================================${NC}"
 }
 
-# Function to get latest snapshot
-get_latest_snapshot() {
+# Function to load snapshot providers
+load_providers() {
     local network=$1
-    local snapshot_url=$2
+    local providers=()
     
-    print_status "Fetching latest snapshot info for $network..."
+    if [ ! -f "$PROVIDERS_CONFIG" ]; then
+        print_error "Providers config not found: $PROVIDERS_CONFIG"
+        return 1
+    fi
     
-    # Get the snapshot listing page
-    local latest_snapshot=$(curl -s "$snapshot_url/" | \
-        grep -oE 'href="[^"]*\.bin\.zst"' | \
+    # Read providers for the specified network
+    while IFS='|' read -r name base_url path_pattern file_pattern compression; do
+        # Skip comments and empty lines
+        [[ $name =~ ^#.*$ ]] && continue
+        [[ -z $name ]] && continue
+        
+        # Filter by network
+        local network_upper=$(echo "$network" | tr '[:lower:]' '[:upper:]')
+        if [[ $name == *"_${network_upper}"* ]]; then
+            providers+=("$name|$base_url|$path_pattern|$file_pattern|$compression")
+        fi
+    done < "$PROVIDERS_CONFIG"
+    
+    printf '%s\n' "${providers[@]}"
+}
+
+# Function to list available providers
+list_providers() {
+    local network=$1
+    local providers=($(load_providers "$network"))
+    
+    if [ ${#providers[@]} -eq 0 ]; then
+        print_error "No providers found for $network"
+        return 1
+    fi
+    
+    print_header "Available Snapshot Providers for $network"
+    local index=1
+    for provider in "${providers[@]}"; do
+        IFS='|' read -r name base_url path_pattern file_pattern compression <<< "$provider"
+        local display_name=$(echo "$name" | sed 's/_MAINNET\|_TESTNET//')
+        echo "$index) $display_name"
+        echo "   URL: $base_url$path_pattern"
+        echo "   Format: $compression compressed"
+        echo ""
+        ((index++))
+    done
+}
+
+# Function to get latest snapshot from provider
+get_latest_snapshot() {
+    local provider_info=$1
+    IFS='|' read -r name base_url path_pattern file_pattern compression <<< "$provider_info"
+    
+    local full_url="$base_url$path_pattern"
+    print_status "Fetching snapshot list from: $full_url"
+    
+    # Get the snapshot listing page and find matching files
+    local latest_snapshot=$(curl -s "$full_url/" | \
+        grep -oE 'href="[^"]*"' | \
         sed 's/href="//;s/"//' | \
+        grep -E "$file_pattern" | \
         sort -V | \
         tail -1)
     
     if [ -z "$latest_snapshot" ]; then
-        print_error "Could not find latest snapshot"
+        print_error "No snapshots found matching pattern: $file_pattern"
         return 1
     fi
     
-    echo "$snapshot_url/$latest_snapshot"
+    echo "$full_url/$latest_snapshot|$compression"
+}
+
+# Function to decompress snapshot
+decompress_snapshot() {
+    local snapshot_file=$1
+    local compression=$2
+    local output_file=$3
+    
+    print_status "Decompressing $compression file..."
+    
+    case $compression in
+        zst)
+            if ! command -v zstd &> /dev/null; then
+                print_error "zstd not found. Install with: apt-get install zstd"
+                return 1
+            fi
+            zstd -d "$snapshot_file" -o "$output_file"
+            ;;
+        gz)
+            if ! command -v gzip &> /dev/null; then
+                print_error "gzip not found"
+                return 1
+            fi
+            gunzip -c "$snapshot_file" > "$output_file"
+            ;;
+        bz2)
+            if ! command -v bzip2 &> /dev/null; then
+                print_error "bzip2 not found"
+                return 1
+            fi
+            bunzip2 -c "$snapshot_file" > "$output_file"
+            ;;
+        xz)
+            if ! command -v xz &> /dev/null; then
+                print_error "xz not found"
+                return 1
+            fi
+            xz -dc "$snapshot_file" > "$output_file"
+            ;;
+        none)
+            cp "$snapshot_file" "$output_file"
+            ;;
+        *)
+            print_error "Unsupported compression: $compression"
+            return 1
+            ;;
+    esac
+    
+    return 0
 }
 
 # Function to download and extract snapshot
 download_snapshot() {
     local network=$1
-    local snapshot_url=$2
-    local data_dir=$3
+    local data_dir=$2
+    local provider_choice=$3
     
     print_header "Downloading Snapshot for $network"
     
-    # Get the latest snapshot URL
-    local full_url=$(get_latest_snapshot "$network" "$snapshot_url")
+    # Load providers
+    local providers=($(load_providers "$network"))
+    if [ ${#providers[@]} -eq 0 ]; then
+        print_error "No providers found for $network"
+        return 1
+    fi
+    
+    # Select provider
+    local selected_provider=""
+    if [ -n "$provider_choice" ] && [ "$provider_choice" -ge 1 ] && [ "$provider_choice" -le ${#providers[@]} ]; then
+        selected_provider="${providers[$((provider_choice-1))]}"
+    else
+        # Default to first provider if no choice given
+        selected_provider="${providers[0]}"
+        if [ -z "$provider_choice" ]; then
+            local provider_name=$(echo "$selected_provider" | cut -d'|' -f1 | sed 's/_MAINNET\|_TESTNET//')
+            print_status "Using default provider: $provider_name"
+        fi
+    fi
+    
+    # Get snapshot URL
+    local snapshot_info=$(get_latest_snapshot "$selected_provider")
     if [ $? -ne 0 ]; then
         return 1
     fi
     
+    IFS='|' read -r full_url compression <<< "$snapshot_info"
     local snapshot_file=$(basename "$full_url")
     local temp_dir="/tmp/libre-snapshot-$network"
     
@@ -84,7 +204,7 @@ download_snapshot() {
     # Create temp directory
     mkdir -p "$temp_dir"
     
-    # Download snapshot
+    # Download snapshot with progress
     if ! wget -q --show-progress -O "$temp_dir/$snapshot_file" "$full_url"; then
         print_error "Download failed"
         rm -rf "$temp_dir"
@@ -102,9 +222,9 @@ download_snapshot() {
     # Create fresh data directory
     mkdir -p "$data_dir"
     
-    # Extract snapshot using zstd
-    if ! zstd -d "$temp_dir/$snapshot_file" -o "$data_dir/snapshot.bin"; then
-        print_error "Extraction failed. Make sure zstd is installed: apt-get install zstd"
+    # Extract snapshot
+    if ! decompress_snapshot "$temp_dir/$snapshot_file" "$compression" "$data_dir/snapshot.bin"; then
+        print_error "Extraction failed"
         rm -rf "$temp_dir"
         return 1
     fi
@@ -126,51 +246,24 @@ configure_lightweight_producer() {
     # Create backup
     cp "$config_file" "${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
     
-    # Add lightweight producer settings
-    cat >> "$config_file" << EOL
-
-## Lightweight Producer Configuration
-# Minimal state persistence for block producers
-
-# Keep only recent blocks in memory
-blocks-retained-dir = 
-blocks-log-stride = 1000
-max-retained-block-files = 1
-
-# Disable state history for producers
-#plugin = eosio::state_history_plugin
-
-# Memory-optimized settings
-chain-state-db-size-mb = 4096       # Reduced from 32GB
-reversible-blocks-db-size-mb = 340  # Minimum required
-eos-vm-oc-cache-size-mb = 512       # Reduced cache
-
-# Snapshot loading on startup
-snapshot = /opt/eosio/data/snapshot.bin
-
-# Producer-specific optimizations
-read-mode = head                    # Only maintain head state
-validation-mode = light             # Light validation for producers
-
-# Disable transaction history
-filter-on = *                       # Disable all action filtering
-filter-out = eosio:onblock:*        # Except onblock
-
-# Reduce P2P overhead
-p2p-max-nodes-per-host = 2          # Limit connections per host
-max-clients = 25                    # Reduce client connections
-
-# Fast startup from snapshot
-database-map-mode = mapped          # Use memory-mapped files
-database-hugepage-path = /dev/hugepages  # Use huge pages if available
-EOL
+    # Enable lightweight producer settings in config
+    sed -i 's/^#snapshot = \/opt\/eosio\/data\/snapshot\.bin/snapshot = \/opt\/eosio\/data\/snapshot.bin/' "$config_file"
+    sed -i 's/^#blocks-log-stride = 1000/blocks-log-stride = 1000/' "$config_file"
+    sed -i 's/^#max-retained-block-files = 1/max-retained-block-files = 1/' "$config_file"
+    sed -i 's/^#blocks-retained-dir =/blocks-retained-dir =/' "$config_file"
+    sed -i 's/^#chain-state-db-size-mb = 4096/chain-state-db-size-mb = 4096/' "$config_file"
+    sed -i 's/^#reversible-blocks-db-size-mb = 340/reversible-blocks-db-size-mb = 340/' "$config_file"
+    sed -i 's/^#read-mode = head/read-mode = head/' "$config_file"
+    sed -i 's/^#validation-mode = light/validation-mode = light/' "$config_file"
+    sed -i 's/^#database-map-mode = mapped/database-map-mode = mapped/' "$config_file"
     
-    print_status "Lightweight producer configuration added to $config_file"
+    print_status "Lightweight producer configuration enabled in $config_file"
 }
 
 # Function to prepare producer container
 prepare_producer_container() {
     local network=$1
+    local provider_choice=$2
     local data_dir="$PROJECT_ROOT/$network/data"
     local config_file="$PROJECT_ROOT/$network/config/config.ini"
     
@@ -179,18 +272,11 @@ prepare_producer_container() {
     # Check if container is running
     if docker ps | grep -q "libre-$network"; then
         print_warning "Stopping existing $network container..."
-        docker stop "libre-$network-api"
+        docker stop "libre-$network-api" 2>/dev/null || true
     fi
     
     # Download snapshot
-    local snapshot_url=""
-    if [ "$network" = "mainnet" ]; then
-        snapshot_url="$MAINNET_SNAPSHOT_URL"
-    else
-        snapshot_url="$TESTNET_SNAPSHOT_URL"
-    fi
-    
-    if ! download_snapshot "$network" "$snapshot_url" "$data_dir"; then
+    if ! download_snapshot "$network" "$data_dir" "$provider_choice"; then
         print_error "Failed to download snapshot"
         return 1
     fi
@@ -199,46 +285,59 @@ prepare_producer_container() {
     configure_lightweight_producer "$config_file" "$network"
     
     print_status "Producer container prepared successfully"
-    print_warning "Start with: docker-compose -f docker/docker-compose-producer.yml up -d libre-$network"
+    print_warning "Start with: ./scripts/start-producer.sh"
     
     return 0
 }
 
-# Function to show producer info
-show_producer_info() {
-    print_header "Lightweight Producer Mode Information"
+# Function to show provider information
+show_provider_info() {
+    print_header "Snapshot Provider Information"
     
-    echo "Lightweight producer mode optimizations:"
-    echo "- Downloads latest snapshot on startup"
-    echo "- Keeps only last 1000 blocks in memory"
-    echo "- Minimal disk persistence (4GB chain state)"
-    echo "- Fast restart from snapshot"
-    echo "- Reduced P2P and client connections"
+    echo "Configured providers:"
     echo ""
-    echo "Snapshot sources:"
-    echo "- Mainnet: $MAINNET_SNAPSHOT_URL"
-    echo "- Testnet: $TESTNET_SNAPSHOT_URL"
+    
+    # Show mainnet providers
+    echo "Mainnet providers:"
+    list_providers "mainnet" || echo "  No mainnet providers configured"
+    
     echo ""
-    echo "Memory requirements:"
-    echo "- Mainnet: ~6GB RAM (4GB state + overhead)"
-    echo "- Testnet: ~4GB RAM (2GB state + overhead)"
+    
+    # Show testnet providers  
+    echo "Testnet providers:"
+    list_providers "testnet" || echo "  No testnet providers configured"
+    
     echo ""
-    print_warning "Note: Snapshots are downloaded fresh on each setup"
-    print_warning "Initial sync from snapshot takes 5-10 minutes"
+    print_status "To add more providers, edit: $PROVIDERS_CONFIG"
 }
 
 # Main execution
 print_header "Libre Producer Snapshot Manager"
 
 echo "This tool sets up lightweight producer nodes using snapshots"
+echo "Supports multiple snapshot providers for flexibility"
 echo ""
+
+# Check if config directory exists
+if [ ! -d "$CONFIG_DIR" ]; then
+    mkdir -p "$CONFIG_DIR"
+fi
+
+# Check if providers config exists
+if [ ! -f "$PROVIDERS_CONFIG" ]; then
+    print_error "Providers configuration not found"
+    print_status "Please ensure $PROVIDERS_CONFIG exists"
+    exit 1
+fi
+
 echo "Options:"
 echo "1) Setup mainnet producer with snapshot"
 echo "2) Setup testnet producer with snapshot"
 echo "3) Download snapshot only (mainnet)"
 echo "4) Download snapshot only (testnet)"
-echo "5) Show lightweight mode info"
-read -p "Select option (1-5): " option
+echo "5) Show provider information"
+echo "6) List providers and select"
+read -p "Select option (1-6): " option
 
 case $option in
     1)
@@ -248,13 +347,43 @@ case $option in
         prepare_producer_container "testnet"
         ;;
     3)
-        download_snapshot "mainnet" "$MAINNET_SNAPSHOT_URL" "$PROJECT_ROOT/mainnet/data"
+        download_snapshot "mainnet" "$PROJECT_ROOT/mainnet/data"
         ;;
     4)
-        download_snapshot "testnet" "$TESTNET_SNAPSHOT_URL" "$PROJECT_ROOT/testnet/data"
+        download_snapshot "testnet" "$PROJECT_ROOT/testnet/data"
         ;;
     5)
-        show_producer_info
+        show_provider_info
+        ;;
+    6)
+        echo ""
+        echo "Select network:"
+        echo "1) Mainnet"
+        echo "2) Testnet"
+        read -p "Choose network (1-2): " net_choice
+        
+        local network=""
+        case $net_choice in
+            1) network="mainnet" ;;
+            2) network="testnet" ;;
+            *) print_error "Invalid choice"; exit 1 ;;
+        esac
+        
+        echo ""
+        list_providers "$network"
+        read -p "Select provider (number): " prov_choice
+        
+        echo ""
+        echo "What would you like to do?"
+        echo "1) Setup producer container"
+        echo "2) Download snapshot only"
+        read -p "Choose action (1-2): " action_choice
+        
+        case $action_choice in
+            1) prepare_producer_container "$network" "$prov_choice" ;;
+            2) download_snapshot "$network" "$PROJECT_ROOT/$network/data" "$prov_choice" ;;
+            *) print_error "Invalid choice"; exit 1 ;;
+        esac
         ;;
     *)
         print_error "Invalid option"
@@ -264,11 +393,3 @@ esac
 
 echo ""
 print_status "Operation complete!"
-
-if [ "$option" = "1" ] || [ "$option" = "2" ]; then
-    echo ""
-    print_status "Next steps:"
-    echo "1. Configure producer keys: ./scripts/deploy-producer.sh"
-    echo "2. Start producer node: ./scripts/start-producer.sh"
-    echo "3. Monitor logs: ./scripts/logs.sh [mainnet|testnet]"
-fi
