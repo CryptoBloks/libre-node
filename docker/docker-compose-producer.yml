@@ -24,7 +24,7 @@ services:
       - type: tmpfs
         target: /opt/eosio/data/blocks
         tmpfs:
-          size: 2G
+          size: 4G
       - type: tmpfs
         target: /opt/eosio/data/state
         tmpfs:
@@ -73,7 +73,7 @@ services:
       - type: tmpfs
         target: /opt/eosio/data/blocks
         tmpfs:
-          size: 1G
+          size: 4G
       - type: tmpfs
         target: /opt/eosio/data/state
         tmpfs:
