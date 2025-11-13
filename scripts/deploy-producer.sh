@@ -107,7 +107,6 @@ plugin = eosio::net_plugin
 
 # Chain Configuration - Lightweight
 chain-state-db-size-mb = 4096
-reversible-blocks-db-size-mb = 340
 
 # Snapshot-based startup (lightweight mode)
 snapshot = /opt/eosio/data/snapshot.bin
@@ -117,10 +116,9 @@ blocks-log-stride = 1000
 max-retained-block-files = 1
 blocks-retained-dir =
 
-# Fast sync options (lightweight mode)
+# Fast sync options (lightweight mode)  
 read-mode = head
 validation-mode = light
-database-map-mode = mapped
 
 # Performance Settings - Producer optimized
 max-transaction-time = 30
@@ -264,10 +262,8 @@ configure_producer() {
     sed -i.bak 's/^#max-retained-block-files = 1/max-retained-block-files = 1/' "$config_file"
     sed -i.bak 's/^#blocks-retained-dir =/blocks-retained-dir =/' "$config_file"
     sed -i.bak 's/^#chain-state-db-size-mb = 4096/chain-state-db-size-mb = 4096/' "$config_file"
-    sed -i.bak 's/^#reversible-blocks-db-size-mb = 340/reversible-blocks-db-size-mb = 340/' "$config_file"
     sed -i.bak 's/^#read-mode = head/read-mode = head/' "$config_file"
     sed -i.bak 's/^#validation-mode = light/validation-mode = light/' "$config_file"
-    sed -i.bak 's/^#database-map-mode = mapped/database-map-mode = mapped/' "$config_file"
     
     # Disable state history for lightweight mode
     sed -i.bak 's/^plugin = eosio::state_history_plugin/#plugin = eosio::state_history_plugin  # Disabled for lightweight mode/' "$config_file"
