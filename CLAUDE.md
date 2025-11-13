@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Docker-based setup for running Libre blockchain nodes (mainnet and testnet) using AntelopeIO Leap v5.0.3. The repository contains configuration scripts, Docker setup, and management tools for operating Libre API nodes with State History Plugin (SHiP) support.
+This is a Docker-based setup for running Libre blockchain nodes (mainnet and testnet) using AntelopeIO Leap v5.0.3. The repository contains configuration scripts, Docker setup, and management tools for operating Libre API nodes with State History Plugin (SHiP) support, plus complete block producer functionality with lightweight mode and automatic snapshot management.
 
 ## Architecture
 
@@ -19,12 +19,21 @@ This is a Docker-based setup for running Libre blockchain nodes (mainnet and tes
 libre-node/
 ├── docker/                   # Docker configuration
 │   ├── Dockerfile           # Custom Libre node image (Ubuntu 22.04 + Leap v5.0.3)
-│   ├── docker-compose.yml   # Container orchestration
+│   ├── docker-compose.yml   # Standard API node orchestration
+│   ├── docker-compose-producer.yml # Producer node orchestration
 │   └── build.sh            # Image build script
 ├── scripts/                 # Management and deployment scripts
+│   ├── deploy-producer.sh   # Producer configuration
+│   ├── producer-snapshot.sh # External snapshot downloads
+│   ├── manage-snapshots.sh  # Local snapshot management
+│   ├── start-producer.sh    # Producer startup
+│   └── restart-producer.sh  # Producer restart
+├── config/                  # Global configuration
+│   └── snapshot-providers.conf # Snapshot provider definitions
 ├── mainnet/                 # Mainnet node files
 │   ├── config/config.ini   # Mainnet nodeos configuration
 │   ├── data/               # Blockchain data (volume mount)
+│   ├── snapshots/          # Local snapshot storage
 │   └── logs/               # Node logs (volume mount)
 ├── testnet/                 # Testnet node files (same structure)
 └── docs/                   # Comprehensive documentation
@@ -177,7 +186,7 @@ For producers that don't need full history, use snapshot-based lightweight mode:
 # Setup lightweight producer
 ./scripts/deploy-producer.sh  # Choose options 3 or 4
 
-# Download latest snapshot
+# Download latest snapshot (for initial setup)
 ./scripts/producer-snapshot.sh  # Option 1 (mainnet) or 2 (testnet)
 
 # Start lightweight producer
@@ -189,11 +198,30 @@ docker-compose -f docker/docker-compose-producer.yml up -d
 
 **Lightweight Mode Features:**
 - Downloads fresh snapshots from configurable providers
-- Keeps only last 1000 blocks in memory
-- Uses 4GB state instead of 32GB
+- Keeps only last 1000 blocks in memory (4GB tmpfs)
+- Uses 16-20GB RAM for state instead of 32GB+ disk
 - tmpfs (RAM) for blocks/state directories
 - Fast restart from snapshot (5-10 minutes)
-- Automatic pruning - no state accumulation
+- Automatic snapshot management (daily create/prune)
+- Latest snapshot auto-detection on container startup
+
+**Automatic Snapshot Management:**
+```bash
+# Manual snapshot operations
+./scripts/manage-snapshots.sh create mainnet    # Create snapshot now
+./scripts/manage-snapshots.sh status           # View current snapshots
+./scripts/manage-snapshots.sh prune --keep 1   # Prune old snapshots
+
+# Automatic operations (runs inside containers):
+# - Daily snapshot creation at 00:00 UTC
+# - Daily snapshot pruning at 01:00 UTC (keeps latest 1)
+# - Automatic latest snapshot detection on startup
+# - Logs available at /var/log/snapshot-*.log in containers
+
+# View automation logs
+docker exec libre-mainnet-producer cat /var/log/snapshot-create.log
+docker exec libre-mainnet-producer cat /var/log/snapshot-prune.log
+```
 
 **Snapshot Provider Configuration:**
 - Multiple providers supported in `config/snapshot-providers.conf`
@@ -208,6 +236,9 @@ docker-compose -f docker/docker-compose-producer.yml up -d
 - **Permission errors**: Run `./setup-permissions.sh`
 - **Slow sync**: Check P2P peer connectivity and network resources
 - **Container issues**: Check logs with `./scripts/logs.sh [network]`
+- **Snapshot not found**: Container auto-detects latest snapshot from snapshots/ directory
+- **Blocks tmpfs full**: Increased to 4GB tmpfs for blocks storage
+- **Producer won't start**: Check signature-provider configuration (v5.0.3 requirement)
 
 ### Performance Tuning
 - Default: 4 CPU cores for chain processing, 6 HTTP threads

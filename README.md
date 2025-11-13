@@ -171,6 +171,8 @@ The repository includes two deployment scripts for configuring nodes:
 | `scripts/deploy-producer.sh` | **NEW**: Configure block producer functionality   |
 | `scripts/producer-snapshot.sh` | **NEW**: Download/manage snapshots for producers |
 | `scripts/start-producer.sh`  | **NEW**: Start lightweight producer nodes         |
+| `scripts/manage-snapshots.sh` | **NEW**: Create, prune, and monitor local snapshots |
+| `scripts/restart-producer.sh` | **NEW**: Restart producer with snapshot options   |
 | `scripts/config-template.sh` | Show all configuration options and recommendations |
 | `scripts/start.sh`           | Start both nodes (builds image if needed)          |
 | `scripts/stop.sh`            | Stop both nodes                                    |
@@ -216,8 +218,10 @@ libre-node/
 │   ├── deploy.sh             # Basic configuration
 │   ├── deploy-advanced.sh    # Advanced configuration
 │   ├── deploy-producer.sh    # Producer configuration
-│   ├── producer-snapshot.sh  # Snapshot management
+│   ├── producer-snapshot.sh  # External snapshot downloads
+│   ├── manage-snapshots.sh   # Local snapshot management (create/prune)
 │   ├── start-producer.sh     # Start producer nodes
+│   ├── restart-producer.sh   # Restart producer nodes
 │   ├── config-template.sh    # Configuration reference
 │   ├── config-utils.sh       # Configuration utilities
 │   ├── start.sh              # Start nodes
@@ -439,6 +443,7 @@ For block producers who don't need full state history, use the lightweight mode 
 - Uses minimal disk space (4GB state vs 32GB)
 - Starts quickly from snapshot (5-10 minutes)
 - Runs with tmpfs (RAM-based) storage for blocks/state
+- **Automatic snapshot management**: Creates daily snapshots and prunes old ones automatically
 
 #### Lightweight Setup Process
 
@@ -462,6 +467,31 @@ For block producers who don't need full state history, use the lightweight mode 
    # Or manually:
    docker-compose -f docker/docker-compose-producer.yml up -d
    ```
+
+#### Automatic Snapshot Management
+
+Lightweight producer containers automatically manage their own snapshots:
+
+- **Daily Creation**: New snapshots created at 00:00 UTC daily
+- **Automatic Pruning**: Old snapshots pruned at 01:00 UTC (keeps latest 1)
+- **Latest Snapshot Detection**: Container automatically uses most recent snapshot on startup
+- **No External Dependencies**: All snapshot management runs inside containers
+
+**Manual Snapshot Operations:**
+```bash
+# Create snapshot immediately
+./scripts/manage-snapshots.sh create mainnet
+
+# Check snapshot status
+./scripts/manage-snapshots.sh status
+
+# Create snapshot via API
+curl -X POST -H "Content-Type: application/json" -d '{}' http://localhost:9888/v1/producer/create_snapshot
+
+# View snapshot automation logs
+docker exec libre-mainnet-producer cat /var/log/snapshot-create.log
+docker exec libre-mainnet-producer cat /var/log/snapshot-prune.log
+```
 
 #### Lightweight Mode Benefits
 
@@ -559,13 +589,21 @@ For issues and questions:
   - Memory-only state (4-6GB RAM vs 16GB+)
   - tmpfs volumes for temporary data
   - Automatic state pruning (last 1000 blocks)
-- **Snapshot Management:** Flexible snapshot provider system
-  - `producer-snapshot.sh` for snapshot downloads
+- **Automatic Snapshot Management:** Container-based snapshot automation
+  - Daily snapshot creation at 00:00 UTC
+  - Automatic snapshot pruning at 01:00 UTC (keeps latest 1)
+  - Latest snapshot auto-detection on container startup
+  - Internal cron scheduling (no external dependencies)
+  - Snapshot management via producer API
+- **Snapshot Management Scripts:** Flexible snapshot provider system
+  - `producer-snapshot.sh` for external snapshot downloads
+  - `manage-snapshots.sh` for local snapshot creation/pruning
   - `config/snapshot-providers.conf` for provider configuration
   - Support for multiple compression formats (zst, gz, bz2, xz)
   - EOSUSA as default provider
 - **Enhanced Scripts:**
   - `start-producer.sh` for lightweight producer startup
+  - `restart-producer.sh` for producer restart with snapshot options
   - Path fixes for all scripts (work from any directory)
   - Improved error handling and validation
   - Added `CLAUDE.md` for AI assistance
@@ -573,6 +611,9 @@ For issues and questions:
   - `docker-compose-producer.yml` for optimized producer containers
   - Memory limits and health checks
   - Host network mode for performance
+  - Cron integration for snapshot automation
+  - Automatic latest snapshot detection in entrypoint
+  - Increased blocks tmpfs storage (4GB) for adequate space
 
 ### v1.1.0 - Configuration Management
 
