@@ -59,6 +59,11 @@ services:
       --delete-all-blocks
       --delete-state-history
       --disable-replay-opts
+    cap_add:
+      - IPC_LOCK
+    security_opt:
+      - seccomp:unconfined
+    shm_size: 2g
     volumes:
       - ../testnet/config:/opt/eosio/config
       - ../testnet/data:/opt/eosio/data

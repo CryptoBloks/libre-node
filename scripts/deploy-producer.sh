@@ -123,7 +123,7 @@ blocks-retained-dir = retained
 
 # Fast sync options (lightweight mode)  
 read-mode = head
-validation-mode = light
+validation-mode = full
 
 # Performance Settings - Producer optimized
 max-transaction-time = 30
@@ -268,7 +268,7 @@ configure_producer() {
     sed -i.bak 's/^#blocks-retained-dir = retained/blocks-retained-dir = retained/' "$config_file"
     sed -i.bak 's/^#chain-state-db-size-mb = 4096/chain-state-db-size-mb = 16384/' "$config_file"
     sed -i.bak 's/^#read-mode = head/read-mode = head/' "$config_file"
-    sed -i.bak 's/^#validation-mode = light/validation-mode = light/' "$config_file"
+    sed -i.bak 's/^#validation-mode = light/validation-mode = full/' "$config_file"
     
     # Disable state history for lightweight mode
     sed -i.bak 's/^plugin = eosio::state_history_plugin/#plugin = eosio::state_history_plugin  # Disabled for lightweight mode/' "$config_file"
