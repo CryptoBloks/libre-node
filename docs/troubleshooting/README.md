@@ -102,10 +102,13 @@ grep S3_ node.conf
 
 ### TLS certificate issues
 
-Caddy auto-renews certificates. If it fails:
+Certificates are managed via certbot (external to the gateway). If TLS fails:
 ```bash
-# Check Caddy logs
-docker logs libre-caddy
+# Check gateway logs
+docker logs libre-mainnet-full-api-gateway
+
+# Renew certificates
+certbot renew
 
 # Verify DNS points to this server
 dig +short api.example.com

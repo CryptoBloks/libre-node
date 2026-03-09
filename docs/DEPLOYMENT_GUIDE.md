@@ -30,7 +30,7 @@ The wizard walks through all configuration sections:
 13. **Peers** — loaded from config/peers-{network}.conf, editable
 14. **Producer settings** — account name and signature provider (producer role only)
 15. **S3 backup** — rclone remote, bucket, prefix, archive type
-16. **TLS** — Caddy with Let's Encrypt (domain and email)
+16. **API Gateway** — OpenResty reverse proxy with API keys, rate limiting, WebSocket proxy, TLS, and optional Cloudflare Zero Trust tunnel
 17. **Firewall** — docker-ufw rules for configured ports
 18. **Webhooks** — Slack, Discord, PagerDuty, or generic URL
 19. **Prometheus** — metrics endpoint port
@@ -48,7 +48,9 @@ Generated files are placed in `$STORAGE_PATH/config/`:
 | `docker-compose.yml` | Container definition with volumes, networking, health checks |
 | `genesis.json` | Chain genesis data |
 | `logging.json` | Logging profile configuration |
-| `Caddyfile` | TLS reverse proxy config (if TLS enabled) |
+| `nginx.conf` | API gateway config (if API_GATEWAY_ENABLED) |
+| `lua/auth.lua` | API key auth + rate limiting (if API_GATEWAY_ENABLED) |
+| `api_keys` | API key store (if API_GATEWAY_ENABLED) |
 
 ## Step 3: Start the Node
 
@@ -93,7 +95,7 @@ This skips all prompts and generates configs from the existing file. To change s
 ./scripts/setup/validate-config.sh node.conf
 ```
 
-Checks: required keys (role-dependent), valid network/role values, IP format, port ranges, port conflicts, log profile, restart policy, and conditional keys (S3, TLS, webhooks, Prometheus).
+Checks: required keys (role-dependent), valid network/role values, IP format, port ranges, port conflicts, log profile, restart policy, and conditional keys (API gateway, TLS, API keys, CF tunnel, S3, webhooks, Prometheus).
 
 ## S3 Backup Setup
 
@@ -117,16 +119,49 @@ The full backup process:
 6. Uploads from the BTRFS snapshot to S3 (streaming tar+zstd via rclone)
 7. Deletes the BTRFS snapshot
 
-## TLS Setup
+## API Gateway Setup
+
+The OpenResty API gateway provides reverse proxying, TLS, API key auth, rate limiting, and WebSocket proxy for SHiP. Only for API roles (light-api, full-api, full-history).
 
 1. Set in node.conf:
    ```
+   API_GATEWAY_ENABLED=true
+   GATEWAY_HTTP_PORT=443
+   GATEWAY_SHIP_PORT=8443
+   API_KEYS_ENABLED=true
+   RATE_LIMIT_RPS=10
+   RATE_LIMIT_BURST=20
    TLS_ENABLED=true
    TLS_DOMAIN=api.example.com
    TLS_EMAIL=admin@example.com
    ```
-2. Regenerate configs and restart
-3. Caddy will automatically obtain Let's Encrypt certificates
+2. Regenerate configs: `./scripts/setup/generate-config.sh node.conf`
+3. Create API keys: `./scripts/setup/manage-keys.sh add "my-app"`
+4. Obtain TLS certificates: `certbot certonly --standalone -d api.example.com`
+5. Restart: `./scripts/node/restart.sh`
+
+### API Key Management
+
+```bash
+./scripts/setup/manage-keys.sh add "consumer-name"    # Create key
+./scripts/setup/manage-keys.sh list                     # List keys
+./scripts/setup/manage-keys.sh remove KEY               # Remove key
+./scripts/setup/manage-keys.sh rotate OLD_KEY "label"   # Rotate key
+./scripts/setup/manage-keys.sh reload                   # Hot-reload keys
+```
+
+### Cloudflare Zero Trust Tunnel
+
+For secure ingress without opening public ports:
+
+1. Set in node.conf:
+   ```
+   CF_TUNNEL_ENABLED=true
+   CF_TUNNEL_TOKEN=your-tunnel-token
+   TLS_ENABLED=false          # CF handles TLS termination
+   API_KEYS_ENABLED=true      # Still require app-level auth
+   ```
+2. Regenerate and restart — a `cloudflared` sidecar container starts alongside the gateway
 
 ## Monitoring Setup
 

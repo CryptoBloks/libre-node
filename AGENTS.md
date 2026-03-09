@@ -4,7 +4,7 @@ Guidance for AI coding assistants working on this repository.
 
 ## Project Overview
 
-Docker-based deployment system for Libre blockchain nodes (mainnet/testnet) using AntelopeIO Leap v5.0.3. A single `node.conf` file drives all configuration — an interactive wizard creates it, and a generator produces Docker Compose, nodeos config.ini, genesis.json, logging profiles, and Caddyfile from templates.
+Docker-based deployment system for Libre blockchain nodes (mainnet/testnet) using AntelopeIO Leap v5.0.3. A single `node.conf` file drives all configuration — an interactive wizard creates it, and a generator produces Docker Compose, nodeos config.ini, genesis.json, logging profiles, and OpenResty gateway configs from templates.
 
 ## Architecture
 
@@ -15,7 +15,9 @@ wizard.sh → node.conf → generate-config.sh → config.ini
                                             → docker-compose.yml
                                             → genesis.json
                                             → logging.json
-                                            → Caddyfile (if TLS)
+                                            → nginx.conf    (if API_GATEWAY_ENABLED)
+                                            → lua/auth.lua  (if API_GATEWAY_ENABLED)
+                                            → api_keys      (if API_GATEWAY_ENABLED)
 ```
 
 `node.conf` is the single source of truth. Never hardcode values that should come from config.
@@ -48,12 +50,14 @@ All scripts source from `scripts/lib/`:
 - **Templates use `{{PLACEHOLDER}}` syntax** — replaced by generate-config.sh using awk
 - **30m stop_grace_period** — allows nodeos to flush state cleanly on shutdown
 - **NODEOS_COMMAND indentation** — must use 6-space indent for YAML folded style compatibility
+- **API Gateway (OpenResty)** — optional reverse proxy with Lua-based API key auth + per-key token-bucket rate limiting. Auth logic in `config/templates/lua/auth.lua`, keys in flat file. WebSocket proxy for SHiP.
+- **Cloudflare Zero Trust** — optional `cloudflared` tunnel sidecar in docker-compose, gated behind API_GATEWAY_ENABLED. CF tunnel provides network ingress; API keys still enforced at application level.
 
 ## Directory Layout
 
 ```
 scripts/
-├── setup/          # wizard.sh, generate-config.sh, validate-config.sh
+├── setup/          # wizard.sh, generate-config.sh, validate-config.sh, manage-keys.sh
 ├── node/           # start.sh, stop.sh, restart.sh, status.sh, logs.sh
 ├── snapshot/       # create.sh, restore.sh, prune.sh, schedule.sh
 ├── backup/         # full-backup.sh, s3-push.sh, s3-pull.sh, s3-list.sh, s3-prune.sh
@@ -64,7 +68,7 @@ config/
 ├── peers-mainnet.conf
 ├── peers-testnet.conf
 ├── snapshot-providers.conf
-└── templates/      # config.ini.tmpl, docker-compose.yml.tmpl, logging-*.json
+└── templates/      # config.ini.tmpl, docker-compose.yml.tmpl, nginx.conf.tmpl, lua/, logging-*.json
 docker/
 ├── Dockerfile
 └── entrypoint.sh

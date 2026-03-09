@@ -88,13 +88,52 @@ Required when `NODE_ROLE=light-api`:
 | `S3_PREFIX` | Yes | Path prefix in bucket |
 | `S3_ARCHIVE_TYPE` | Yes | `full` or `snapshots` |
 
-## TLS
+## API Gateway (OpenResty)
 
-| Key | Required when TLS | Description |
-|-----|-------------------|-------------|
-| `TLS_ENABLED` | Always | `true` or `false` |
-| `TLS_DOMAIN` | Yes | Domain for Let's Encrypt |
-| `TLS_EMAIL` | Yes | Email for Let's Encrypt |
+The API gateway provides reverse proxying, TLS termination, API key authentication, per-key rate limiting, and WebSocket proxy for the SHiP endpoint. Only applicable to API roles (`light-api`, `full-api`, `full-history`).
+
+| Key | Required | Description | Default |
+|-----|----------|-------------|---------|
+| `API_GATEWAY_ENABLED` | Always | Master switch for the gateway | `false` |
+| `GATEWAY_HTTP_PORT` | When gateway | Public-facing HTTP/HTTPS port | `443` |
+| `GATEWAY_SHIP_PORT` | full-api, full-history | Public-facing WebSocket port for SHiP | `8443` |
+| `API_KEYS_ENABLED` | No | Require X-API-Key header | `false` |
+| `RATE_LIMIT_RPS` | When keys | Requests/sec per API key | `10` |
+| `RATE_LIMIT_BURST` | When keys | Burst capacity per key | `20` |
+| `TLS_ENABLED` | No | Enable TLS with Let's Encrypt certs | `false` |
+| `TLS_DOMAIN` | When TLS | Domain for certificates | |
+| `TLS_EMAIL` | When TLS | Email for Let's Encrypt | |
+| `CF_TUNNEL_ENABLED` | No | Enable Cloudflare Zero Trust tunnel | `false` |
+| `CF_TUNNEL_TOKEN` | When CF tunnel | Cloudflare tunnel token | |
+
+### API Key Management
+
+Use `scripts/setup/manage-keys.sh` to create and manage API keys:
+
+```bash
+# Add a key with a label
+./scripts/setup/manage-keys.sh add "my-app"
+
+# List all keys
+./scripts/setup/manage-keys.sh list
+
+# Remove a key
+./scripts/setup/manage-keys.sh remove KEY_VALUE
+
+# Rotate a key (remove old, create new)
+./scripts/setup/manage-keys.sh rotate OLD_KEY "my-app"
+
+# Reload keys in the running gateway (sends SIGHUP)
+./scripts/setup/manage-keys.sh reload
+```
+
+Keys are stored in `${STORAGE_PATH}/config/api_keys` (one per line, `KEY:label`).
+
+### Cloudflare Zero Trust
+
+When `CF_TUNNEL_ENABLED=true`, a `cloudflared` sidecar container runs alongside the gateway. The tunnel provides secure ingress without opening public ports. API key authentication is still enforced — the tunnel handles transport, not application auth.
+
+Typical setup: disable TLS on the gateway (Cloudflare terminates TLS) but keep API keys enabled.
 
 ## Firewall
 

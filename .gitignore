@@ -71,6 +71,8 @@ snapshots/
 # BTRFS snapshot directories
 .backup-*
 
-# Caddy data
-caddy_data/
-caddy_config/
+# API keys (sensitive — never commit)
+api_keys
+
+# OpenResty / gateway data
+openresty_logs/

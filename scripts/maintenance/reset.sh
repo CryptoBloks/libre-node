@@ -113,7 +113,9 @@ main() {
         rm -f "${storage_path}/config/config.ini"
         rm -f "${storage_path}/config/docker-compose.yml"
         rm -f "${storage_path}/config/logging.json"
-        rm -f "${storage_path}/config/Caddyfile"
+        rm -f "${storage_path}/config/nginx.conf"
+        rm -rf "${storage_path}/config/lua"
+        rm -f "${storage_path}/config/api_keys"
         log_info "Generated config files deleted."
     fi
 

@@ -238,6 +238,9 @@ main() {
     fi
 
     # Print success summary
+    local API_GATEWAY_ENABLED
+    API_GATEWAY_ENABLED="$(get_config "API_GATEWAY_ENABLED" "false")"
+
     echo ""
     log_success "Node started successfully!"
     echo ""
@@ -246,6 +249,15 @@ main() {
     echo "  Role:       ${NODE_ROLE}"
     echo "  API:        http://${BIND_IP}:${HTTP_PORT}"
     echo "  P2P:        ${BIND_IP}:${P2P_PORT}"
+    if [[ "$API_GATEWAY_ENABLED" == "true" ]]; then
+        local GATEWAY_HTTP_PORT
+        GATEWAY_HTTP_PORT="$(get_config "GATEWAY_HTTP_PORT" "443")"
+        local TLS_ENABLED
+        TLS_ENABLED="$(get_config "TLS_ENABLED" "false")"
+        local proto="http"
+        [[ "$TLS_ENABLED" == "true" ]] && proto="https"
+        echo "  Gateway:    ${proto}://${BIND_IP}:${GATEWAY_HTTP_PORT}"
+    fi
     echo ""
 }
 

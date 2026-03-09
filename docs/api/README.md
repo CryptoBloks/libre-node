@@ -4,6 +4,26 @@ Libre nodes expose the standard AntelopeIO HTTP API. The port and bind IP are co
 
 Seed nodes (`NODE_ROLE=seed`) do not expose an HTTP API.
 
+## API Gateway
+
+When `API_GATEWAY_ENABLED=true`, an OpenResty reverse proxy sits in front of the nodeos API and provides:
+
+- **TLS termination** (optional, via Let's Encrypt)
+- **API key authentication** — pass `X-API-Key` header or `?api_key=` query parameter
+- **Per-key rate limiting** — token bucket at `RATE_LIMIT_RPS` with `RATE_LIMIT_BURST` capacity
+- **WebSocket proxy** for State History (SHiP) on `GATEWAY_SHIP_PORT`
+- **Health endpoint** at `/health` (no auth required)
+
+```bash
+# With API key via header
+curl -H "X-API-Key: YOUR_KEY" https://api.example.com/v1/chain/get_info
+
+# Health check (no key required)
+curl https://api.example.com/health
+```
+
+Manage keys with `scripts/setup/manage-keys.sh` (see [Configuration](../CONFIGURATION.md)).
+
 ## Chain API
 
 ```bash
@@ -53,10 +73,16 @@ curl -X POST http://localhost:8888/v1/producer/unschedule_snapshot \
 
 ## State History (full-api, full-history)
 
-WebSocket endpoint at `ws://BIND_IP:SHIP_PORT`.
+Direct WebSocket endpoint at `ws://BIND_IP:SHIP_PORT`.
+
+When the API gateway is enabled, connect via `ws[s]://DOMAIN:GATEWAY_SHIP_PORT` with an API key:
 
 ```javascript
-const ws = new WebSocket("ws://localhost:8080");
+// Via gateway (with API key as query param — WebSocket clients can't set headers during handshake)
+const ws = new WebSocket("wss://api.example.com:8443/?api_key=YOUR_KEY");
+
+// Direct (no gateway)
+// const ws = new WebSocket("ws://localhost:8080");
 
 ws.onopen = () => {
   ws.send(JSON.stringify({

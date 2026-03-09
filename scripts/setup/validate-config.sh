@@ -107,7 +107,7 @@ ALWAYS_REQUIRED=(
     CONTAINER_NAME
     AGENT_NAME
     RESTART_POLICY
-    TLS_ENABLED
+    API_GATEWAY_ENABLED
     FIREWALL_ENABLED
     WEBHOOK_ENABLED
     PROMETHEUS_ENABLED
@@ -135,9 +135,26 @@ done
 NODE_ROLE="$(get_config NODE_ROLE "")"
 STATE_IN_MEMORY="$(get_config STATE_IN_MEMORY "false")"
 S3_ENABLED="$(get_config S3_ENABLED "false")"
-TLS_ENABLED="$(get_config TLS_ENABLED "false")"
 WEBHOOK_ENABLED="$(get_config WEBHOOK_ENABLED "false")"
 PROMETHEUS_ENABLED="$(get_config PROMETHEUS_ENABLED "false")"
+
+# ---------------------------------------------------------------------------
+# Helper: validate port and record it for conflict checking
+# ---------------------------------------------------------------------------
+declare -A PORT_VALUES=()
+
+check_port() {
+    local key="$1"
+    local value
+    value="$(get_config "$key" "")"
+    if [[ -n "$value" ]]; then
+        if ! validate_port "$value"; then
+            add_error "${key} '${value}' is not a valid port number (1-65535)."
+        else
+            PORT_VALUES["$key"]="$value"
+        fi
+    fi
+}
 
 # Role-dependent keys
 if [[ "$NODE_ROLE" != "seed" ]]; then
@@ -171,9 +188,42 @@ if [[ "$S3_ENABLED" == "true" ]]; then
     require_key "S3_ARCHIVE_TYPE"
 fi
 
-if [[ "$TLS_ENABLED" == "true" ]]; then
-    require_key "TLS_DOMAIN"
-    require_key "TLS_EMAIL"
+# API Gateway validation
+API_GATEWAY_ENABLED="$(get_config API_GATEWAY_ENABLED "false")"
+if [[ "$API_GATEWAY_ENABLED" == "true" ]]; then
+    require_key "GATEWAY_HTTP_PORT"
+    check_port "GATEWAY_HTTP_PORT"
+
+    # Gateway only makes sense for API-serving roles
+    if [[ "$NODE_ROLE" == "seed" || "$NODE_ROLE" == "producer" ]]; then
+        add_error "API_GATEWAY_ENABLED=true is not supported for role '${NODE_ROLE}'. Gateway is for API roles only."
+    fi
+
+    # SHiP gateway port required for full-api/full-history
+    if [[ "$NODE_ROLE" == "full-api" || "$NODE_ROLE" == "full-history" ]]; then
+        require_key "GATEWAY_SHIP_PORT"
+        check_port "GATEWAY_SHIP_PORT"
+    fi
+
+    # TLS sub-validation
+    TLS_ENABLED="$(get_config TLS_ENABLED "false")"
+    if [[ "$TLS_ENABLED" == "true" ]]; then
+        require_key "TLS_DOMAIN"
+        require_key "TLS_EMAIL"
+    fi
+
+    # API keys sub-validation
+    API_KEYS_ENABLED="$(get_config API_KEYS_ENABLED "false")"
+    if [[ "$API_KEYS_ENABLED" == "true" ]]; then
+        require_key "RATE_LIMIT_RPS"
+        require_key "RATE_LIMIT_BURST"
+    fi
+
+    # Cloudflare Tunnel sub-validation
+    CF_TUNNEL_ENABLED="$(get_config CF_TUNNEL_ENABLED "false")"
+    if [[ "$CF_TUNNEL_ENABLED" == "true" ]]; then
+        require_key "CF_TUNNEL_TOKEN"
+    fi
 fi
 
 if [[ "$WEBHOOK_ENABLED" == "true" ]]; then
@@ -228,21 +278,6 @@ fi
 # ---------------------------------------------------------------------------
 log_info "Checking port values..."
 
-declare -A PORT_VALUES=()
-
-check_port() {
-    local key="$1"
-    local value
-    value="$(get_config "$key" "")"
-    if [[ -n "$value" ]]; then
-        if ! validate_port "$value"; then
-            add_error "${key} '${value}' is not a valid port number (1-65535)."
-        else
-            PORT_VALUES["$key"]="$value"
-        fi
-    fi
-}
-
 check_port "HTTP_PORT"
 check_port "P2P_PORT"
 check_port "SHIP_PORT"
@@ -256,8 +291,8 @@ fi
 # ---------------------------------------------------------------------------
 log_info "Checking for port conflicts..."
 
-# Collect the main service ports (HTTP, P2P, SHIP)
-MAIN_PORT_KEYS=("HTTP_PORT" "P2P_PORT" "SHIP_PORT")
+# Collect all service ports (including gateway ports if configured)
+MAIN_PORT_KEYS=("HTTP_PORT" "P2P_PORT" "SHIP_PORT" "GATEWAY_HTTP_PORT" "GATEWAY_SHIP_PORT")
 for (( i = 0; i < ${#MAIN_PORT_KEYS[@]}; i++ )); do
     local_key="${MAIN_PORT_KEYS[$i]}"
     local_val="${PORT_VALUES[$local_key]:-}"

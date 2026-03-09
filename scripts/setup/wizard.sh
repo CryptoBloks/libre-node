@@ -34,7 +34,7 @@ NON_INTERACTIVE=false
 REQUIRED_KEYS=(
     NETWORK NODE_ROLE LEAP_VERSION BIND_IP P2P_PORT
     STORAGE_PATH STATE_IN_MEMORY SNAPSHOT_INTERVAL SNAPSHOT_RETENTION
-    LOG_PROFILE TLS_ENABLED FIREWALL_ENABLED WEBHOOK_ENABLED
+    LOG_PROFILE API_GATEWAY_ENABLED FIREWALL_ENABLED WEBHOOK_ENABLED
     PROMETHEUS_ENABLED AGENT_NAME CONTAINER_NAME RESTART_POLICY
 )
 
@@ -812,36 +812,144 @@ section_logging() {
 }
 
 # ---------------------------------------------------------------------------
-# 14. TLS / Let's Encrypt
+# 14. API Gateway (OpenResty) — TLS, API Keys, Rate Limiting, CF Tunnel
 # ---------------------------------------------------------------------------
-section_tls() {
-    log_header "TLS / HTTPS"
+section_api_gateway() {
+    local role
+    role="$(get_config NODE_ROLE "")"
 
+    # Gateway only applies to API-serving roles
+    case "$role" in
+        light-api|full-api|full-history) ;;
+        *)
+            set_config API_GATEWAY_ENABLED "false"
+            set_config TLS_ENABLED "false"
+            return 0
+            ;;
+    esac
+
+    log_header "API Gateway (OpenResty)"
+
+    echo "  The API gateway provides reverse proxying, TLS termination,"
+    echo "  API key authentication, per-key rate limiting, and WebSocket"
+    echo "  proxy for the State History (SHiP) endpoint."
+    echo ""
+
+    # --- Master enable ---
     local prev_enabled
-    prev_enabled="$(get_config TLS_ENABLED "")"
+    prev_enabled="$(get_config API_GATEWAY_ENABLED "")"
     local default_yn="n"
     [[ "$prev_enabled" == "true" ]] && default_yn="y"
 
-    if ! ask_yes_no "Enable HTTPS with Let's Encrypt?" "$default_yn"; then
+    if ! ask_yes_no "Enable API gateway?" "$default_yn"; then
+        set_config API_GATEWAY_ENABLED "false"
         set_config TLS_ENABLED "false"
         return 0
     fi
+    set_config API_GATEWAY_ENABLED "true"
 
-    set_config TLS_ENABLED "true"
+    # --- Gateway HTTP port ---
+    local prev_gw_http
+    prev_gw_http="$(get_config GATEWAY_HTTP_PORT "443")"
+    local gw_http
+    while true; do
+        gw_http="$(ask_input "Public gateway HTTP port" "$prev_gw_http")"
+        if validate_port "$gw_http"; then break; fi
+        log_warn "Invalid port number. Must be 1-65535."
+    done
+    set_config GATEWAY_HTTP_PORT "$gw_http"
 
-    local prev_domain
-    prev_domain="$(get_config TLS_DOMAIN "")"
-    local domain
-    domain="$(ask_input "Domain name (e.g. api.libre.example.com)" "$prev_domain")"
-    set_config TLS_DOMAIN "$domain"
+    # --- Gateway SHiP/WebSocket port (full-api/full-history only) ---
+    if [[ "$role" == "full-api" || "$role" == "full-history" ]]; then
+        local prev_gw_ship
+        prev_gw_ship="$(get_config GATEWAY_SHIP_PORT "8443")"
+        local gw_ship
+        while true; do
+            gw_ship="$(ask_input "Public gateway SHiP/WebSocket port" "$prev_gw_ship")"
+            if validate_port "$gw_ship"; then break; fi
+            log_warn "Invalid port number. Must be 1-65535."
+        done
+        set_config GATEWAY_SHIP_PORT "$gw_ship"
+    fi
 
-    local prev_email
-    prev_email="$(get_config TLS_EMAIL "")"
-    local email
-    email="$(ask_input "Let's Encrypt email" "$prev_email")"
-    set_config TLS_EMAIL "$email"
+    # --- TLS ---
+    echo ""
+    local prev_tls
+    prev_tls="$(get_config TLS_ENABLED "")"
+    local tls_default="n"
+    [[ "$prev_tls" == "true" ]] && tls_default="y"
 
-    log_success "TLS enabled for ${domain}"
+    if ask_yes_no "Enable TLS with Let's Encrypt?" "$tls_default"; then
+        set_config TLS_ENABLED "true"
+
+        local prev_domain
+        prev_domain="$(get_config TLS_DOMAIN "")"
+        local domain
+        domain="$(ask_input "Domain name (e.g. api.libre.example.com)" "$prev_domain")"
+        set_config TLS_DOMAIN "$domain"
+
+        local prev_email
+        prev_email="$(get_config TLS_EMAIL "")"
+        local email
+        email="$(ask_input "Let's Encrypt email" "$prev_email")"
+        set_config TLS_EMAIL "$email"
+    else
+        set_config TLS_ENABLED "false"
+    fi
+
+    # --- API Keys ---
+    echo ""
+    local prev_keys
+    prev_keys="$(get_config API_KEYS_ENABLED "")"
+    local keys_default="y"
+    [[ "$prev_keys" == "false" ]] && keys_default="n"
+
+    if ask_yes_no "Enable API key authentication?" "$keys_default"; then
+        set_config API_KEYS_ENABLED "true"
+
+        echo "  Rate limiting is per API key. Requests beyond the limit"
+        echo "  receive HTTP 429 with a Retry-After header."
+        echo ""
+
+        local prev_rps
+        prev_rps="$(get_config RATE_LIMIT_RPS "10")"
+        local rps
+        rps="$(ask_input "Rate limit (requests/sec per key)" "$prev_rps")"
+        set_config RATE_LIMIT_RPS "$rps"
+
+        local prev_burst
+        prev_burst="$(get_config RATE_LIMIT_BURST "20")"
+        local burst
+        burst="$(ask_input "Rate limit burst capacity" "$prev_burst")"
+        set_config RATE_LIMIT_BURST "$burst"
+    else
+        set_config API_KEYS_ENABLED "false"
+    fi
+
+    # --- Cloudflare Zero Trust Tunnel ---
+    echo ""
+    local prev_cf
+    prev_cf="$(get_config CF_TUNNEL_ENABLED "")"
+    local cf_default="n"
+    [[ "$prev_cf" == "true" ]] && cf_default="y"
+
+    echo "  Cloudflare Zero Trust tunnels provide secure ingress without"
+    echo "  opening public ports. Requires a Cloudflare tunnel token."
+    echo ""
+
+    if ask_yes_no "Enable Cloudflare Zero Trust tunnel?" "$cf_default"; then
+        set_config CF_TUNNEL_ENABLED "true"
+
+        local prev_token
+        prev_token="$(get_config CF_TUNNEL_TOKEN "")"
+        local token
+        token="$(ask_input "Cloudflare tunnel token" "$prev_token")"
+        set_config CF_TUNNEL_TOKEN "$token"
+    else
+        set_config CF_TUNNEL_ENABLED "false"
+    fi
+
+    log_success "API gateway configured"
 }
 
 # ---------------------------------------------------------------------------
@@ -1078,7 +1186,7 @@ show_summary() {
         value="${line#*=}"
 
         # Mask sensitive values
-        if [[ "$key" == "SIGNATURE_PROVIDER" && -n "$value" ]]; then
+        if [[ ( "$key" == "SIGNATURE_PROVIDER" || "$key" == "CF_TUNNEL_TOKEN" ) && -n "$value" ]]; then
             value="********(hidden)"
         fi
 
@@ -1140,7 +1248,7 @@ main() {
     section_s3
     section_backup_schedule
     section_logging
-    section_tls
+    section_api_gateway
     section_firewall
     section_monitoring
     section_producer

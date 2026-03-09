@@ -8,7 +8,8 @@
 #   - docker-compose.yml  (container orchestration)
 #   - genesis.json        (chain genesis)
 #   - logging.json        (logging profile)
-#   - Caddyfile           (TLS reverse proxy, if enabled)
+#   - nginx.conf          (API gateway, if enabled)
+#   - lua/auth.lua        (API key auth + rate limiting, if enabled)
 #
 # Usage:
 #   generate-config.sh /path/to/node.conf [--dry-run]
@@ -79,8 +80,6 @@ SHIP_PORT="$(get_config SHIP_PORT "")"
 STORAGE_PATH="$(get_config STORAGE_PATH)"
 STATE_IN_MEMORY="$(get_config STATE_IN_MEMORY "false")"
 STATE_TMPFS_SIZE="$(get_config STATE_TMPFS_SIZE "")"
-SNAPSHOT_INTERVAL="$(get_config SNAPSHOT_INTERVAL)"
-SNAPSHOT_RETENTION="$(get_config SNAPSHOT_RETENTION)"
 LOG_PROFILE="$(get_config LOG_PROFILE "production")"
 CONTAINER_NAME="$(get_config CONTAINER_NAME)"
 AGENT_NAME="$(get_config AGENT_NAME)"
@@ -95,12 +94,16 @@ PRODUCER_NAME="$(get_config PRODUCER_NAME "")"
 SIGNATURE_PROVIDER="$(get_config SIGNATURE_PROVIDER "")"
 TLS_ENABLED="$(get_config TLS_ENABLED "false")"
 TLS_DOMAIN="$(get_config TLS_DOMAIN "")"
-TLS_EMAIL="$(get_config TLS_EMAIL "")"
+API_GATEWAY_ENABLED="$(get_config API_GATEWAY_ENABLED "false")"
+API_KEYS_ENABLED="$(get_config API_KEYS_ENABLED "false")"
+RATE_LIMIT_RPS="$(get_config RATE_LIMIT_RPS "10")"
+RATE_LIMIT_BURST="$(get_config RATE_LIMIT_BURST "20")"
+GATEWAY_HTTP_PORT="$(get_config GATEWAY_HTTP_PORT "443")"
+GATEWAY_SHIP_PORT="$(get_config GATEWAY_SHIP_PORT "8443")"
+CF_TUNNEL_ENABLED="$(get_config CF_TUNNEL_ENABLED "false")"
+CF_TUNNEL_TOKEN="$(get_config CF_TUNNEL_TOKEN "")"
 BLOCKS_LOG_STRIDE="$(get_config BLOCKS_LOG_STRIDE "")"
 MAX_RETAINED_BLOCK_FILES="$(get_config MAX_RETAINED_BLOCK_FILES "")"
-S3_ENABLED="$(get_config S3_ENABLED "false")"
-PROMETHEUS_ENABLED="$(get_config PROMETHEUS_ENABLED "false")"
-WEBHOOK_ENABLED="$(get_config WEBHOOK_ENABLED "false")"
 
 # ---------------------------------------------------------------------------
 # Output directory setup
@@ -340,22 +343,46 @@ if [[ "$STATE_IN_MEMORY" == "true" ]]; then
     ENVIRONMENT_BLOCK+=$'\n'"      - STATE_IN_MEMORY=true"
 fi
 
-# Build CADDY_SERVICE
-CADDY_BLOCK=""
-if [[ "$TLS_ENABLED" == "true" ]]; then
-    CADDY_BLOCK="  caddy:
-    image: caddy:latest
-    container_name: ${CONTAINER_NAME}-caddy
+# Build GATEWAY_SERVICE (OpenResty + optional Cloudflare Tunnel)
+GATEWAY_BLOCK=""
+if [[ "$API_GATEWAY_ENABLED" == "true" ]]; then
+    GATEWAY_BLOCK="  ${CONTAINER_NAME}-gateway:
+    image: openresty/openresty:latest
+    container_name: ${CONTAINER_NAME}-gateway
     volumes:
-      - ${STORAGE_PATH}/config/Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
+      - ${CONFIG_OUTPUT_DIR}/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      - ${CONFIG_OUTPUT_DIR}/lua:/etc/openresty/lua:ro
+      - ${CONFIG_OUTPUT_DIR}/api_keys:/etc/openresty/api_keys:ro
+      - ${LOGS_DIR}/gateway:/var/log/openresty"
+
+    if [[ "$TLS_ENABLED" == "true" ]]; then
+        GATEWAY_BLOCK+="
+      - /etc/letsencrypt:/etc/letsencrypt:ro"
+    fi
+
+    GATEWAY_BLOCK+="
     network_mode: host
     restart: unless-stopped
+    environment:
+      - API_KEYS_ENABLED=${API_KEYS_ENABLED}
+      - RATE_LIMIT_RPS=${RATE_LIMIT_RPS}
+      - RATE_LIMIT_BURST=${RATE_LIMIT_BURST}"
 
-volumes:
-  caddy_data:
-  caddy_config:"
+    # Cloudflare Zero Trust tunnel sidecar
+    if [[ "$CF_TUNNEL_ENABLED" == "true" ]]; then
+        GATEWAY_BLOCK+="
+
+  ${CONTAINER_NAME}-cftunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: ${CONTAINER_NAME}-cftunnel
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN}
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      - ${CONTAINER_NAME}-gateway"
+    fi
 fi
 
 # Perform substitutions
@@ -375,7 +402,7 @@ COMPOSE_CONTENT="$(replace_placeholder "{{TMPFS_VOLUMES}}" "$TMPFS_BLOCK" "$COMP
 COMPOSE_CONTENT="$(replace_placeholder "{{EXTRA_VOLUMES}}" "" "$COMPOSE_CONTENT")"
 COMPOSE_CONTENT="$(replace_placeholder "{{HEALTHCHECK}}" "$HEALTHCHECK_BLOCK" "$COMPOSE_CONTENT")"
 COMPOSE_CONTENT="$(replace_placeholder "{{ENVIRONMENT}}" "$ENVIRONMENT_BLOCK" "$COMPOSE_CONTENT")"
-COMPOSE_CONTENT="$(replace_placeholder "{{CADDY_SERVICE}}" "$CADDY_BLOCK" "$COMPOSE_CONTENT")"
+COMPOSE_CONTENT="$(replace_placeholder "{{GATEWAY_SERVICE}}" "$GATEWAY_BLOCK" "$COMPOSE_CONTENT")"
 
 write_file "${CONFIG_OUTPUT_DIR}/docker-compose.yml" "$COMPOSE_CONTENT"
 
@@ -403,17 +430,96 @@ LOGGING_CONTENT="$(cat "$LOGGING_TEMPLATE")"
 write_file "${CONFIG_OUTPUT_DIR}/logging.json" "$LOGGING_CONTENT"
 
 # =============================================================================
-# Generate Caddyfile (if TLS is enabled)
+# Generate nginx.conf + Lua auth (if API gateway is enabled)
 # =============================================================================
-if [[ "$TLS_ENABLED" == "true" ]]; then
-    log_header "Generating Caddyfile"
+if [[ "$API_GATEWAY_ENABLED" == "true" ]]; then
+    log_header "Generating nginx.conf"
 
-    CADDYFILE_CONTENT="${TLS_DOMAIN} {
-    reverse_proxy localhost:${HTTP_PORT}
-    tls ${TLS_EMAIL}
-}"
+    NGINX_TEMPLATE="$(cat "${TEMPLATE_DIR}/nginx.conf.tmpl")"
+    NGINX_CONTENT="$NGINX_TEMPLATE"
 
-    write_file "${CONFIG_OUTPUT_DIR}/Caddyfile" "$CADDYFILE_CONTENT"
+    # Simple substitutions
+    NGINX_CONTENT="$(echo "$NGINX_CONTENT" | sed "s|{{HTTP_PORT}}|${HTTP_PORT}|g")"
+
+    # Build LISTEN_DIRECTIVE_HTTP
+    if [[ "$TLS_ENABLED" == "true" ]]; then
+        LISTEN_HTTP="listen ${GATEWAY_HTTP_PORT} ssl;"
+    else
+        LISTEN_HTTP="listen ${GATEWAY_HTTP_PORT};"
+    fi
+    NGINX_CONTENT="$(replace_placeholder "{{LISTEN_DIRECTIVE_HTTP}}" "        ${LISTEN_HTTP}" "$NGINX_CONTENT")"
+
+    # Build TLS_DIRECTIVES
+    TLS_BLOCK=""
+    if [[ "$TLS_ENABLED" == "true" ]]; then
+        TLS_BLOCK="        ssl_certificate /etc/letsencrypt/live/${TLS_DOMAIN}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/${TLS_DOMAIN}/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;"
+    fi
+    NGINX_CONTENT="$(replace_placeholder "{{TLS_DIRECTIVES}}" "$TLS_BLOCK" "$NGINX_CONTENT")"
+
+    # Build SHIP_UPSTREAM
+    SHIP_UPSTREAM_BLOCK=""
+    if [[ "$NODE_ROLE" == "full-api" || "$NODE_ROLE" == "full-history" ]]; then
+        SHIP_UPSTREAM_BLOCK="    upstream nodeos_ship {
+        server 127.0.0.1:${SHIP_PORT};
+    }"
+    fi
+    NGINX_CONTENT="$(replace_placeholder "{{SHIP_UPSTREAM}}" "$SHIP_UPSTREAM_BLOCK" "$NGINX_CONTENT")"
+
+    # Build SHIP_SERVER_BLOCK (WebSocket proxy for SHiP)
+    SHIP_SERVER_BLOCK=""
+    if [[ "$NODE_ROLE" == "full-api" || "$NODE_ROLE" == "full-history" ]]; then
+        if [[ "$TLS_ENABLED" == "true" ]]; then
+            SHIP_LISTEN="listen ${GATEWAY_SHIP_PORT} ssl;"
+            SHIP_TLS="        ssl_certificate /etc/letsencrypt/live/${TLS_DOMAIN}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/${TLS_DOMAIN}/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;"
+        else
+            SHIP_LISTEN="listen ${GATEWAY_SHIP_PORT};"
+            SHIP_TLS=""
+        fi
+
+        SHIP_SERVER_BLOCK="    # --- SHiP WebSocket proxy ---
+    server {
+        ${SHIP_LISTEN}
+        ${SHIP_TLS}
+
+        access_by_lua_file /etc/openresty/lua/auth.lua;
+
+        location / {
+            proxy_pass http://nodeos_ship;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection \"upgrade\";
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+        }
+    }"
+    fi
+    NGINX_CONTENT="$(replace_placeholder "{{SHIP_SERVER_BLOCK}}" "$SHIP_SERVER_BLOCK" "$NGINX_CONTENT")"
+
+    write_file "${CONFIG_OUTPUT_DIR}/nginx.conf" "$NGINX_CONTENT"
+
+    # Copy Lua auth script
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "Would copy lua/auth.lua -> ${CONFIG_OUTPUT_DIR}/lua/auth.lua"
+    else
+        mkdir -p "${CONFIG_OUTPUT_DIR}/lua"
+        cp "${TEMPLATE_DIR}/lua/auth.lua" "${CONFIG_OUTPUT_DIR}/lua/auth.lua"
+        log_info "Generated: ${CONFIG_OUTPUT_DIR}/lua/auth.lua"
+    fi
+
+    # Ensure api_keys file exists
+    if [[ "$DRY_RUN" != "true" && ! -f "${CONFIG_OUTPUT_DIR}/api_keys" ]]; then
+        echo "# API Keys — one per line, format: KEY_VALUE:label" > "${CONFIG_OUTPUT_DIR}/api_keys"
+        chmod 600 "${CONFIG_OUTPUT_DIR}/api_keys"
+        log_info "Created empty API keys file: ${CONFIG_OUTPUT_DIR}/api_keys"
+    fi
 fi
 
 # =============================================================================
@@ -445,8 +551,10 @@ else
     log_info "  ${CONFIG_OUTPUT_DIR}/docker-compose.yml"
     log_info "  ${CONFIG_OUTPUT_DIR}/genesis.json"
     log_info "  ${CONFIG_OUTPUT_DIR}/logging.json"
-    if [[ "$TLS_ENABLED" == "true" ]]; then
-        log_info "  ${CONFIG_OUTPUT_DIR}/Caddyfile"
+    if [[ "$API_GATEWAY_ENABLED" == "true" ]]; then
+        log_info "  ${CONFIG_OUTPUT_DIR}/nginx.conf"
+        log_info "  ${CONFIG_OUTPUT_DIR}/lua/auth.lua"
+        log_info "  ${CONFIG_OUTPUT_DIR}/api_keys"
     fi
     log_info "  ${CONFIG_OUTPUT_DIR}/node.conf"
 fi

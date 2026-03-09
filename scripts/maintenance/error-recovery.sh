@@ -404,7 +404,7 @@ fix() {
         local prune_script="${SCRIPT_DIR}/../snapshot/prune.sh"
         if [[ -x "$prune_script" ]]; then
             log_info "Running snapshot pruning..."
-            "$prune_script" "${CONFIG_FILE}" || true
+            "$prune_script" "${STORAGE_PATH}/config/node.conf" || true
         else
             log_warn "Snapshot prune script not found at ${prune_script}."
             log_info "Manually remove old snapshots from ${STORAGE_PATH}/snapshots/"

@@ -55,7 +55,9 @@ wizard.sh → node.conf → generate-config.sh → config.ini
                                             → docker-compose.yml
                                             → genesis.json
                                             → logging.json
-                                            → Caddyfile (if TLS enabled)
+                                            → nginx.conf    (if API gateway enabled)
+                                            → lua/auth.lua  (if API gateway enabled)
+                                            → api_keys      (if API gateway enabled)
 ```
 
 `node.conf` is the single source of truth. All generated configs live in `$STORAGE_PATH/config/`.
@@ -66,7 +68,7 @@ wizard.sh → node.conf → generate-config.sh → config.ini
 - **EOSIO snapshot scheduling**: Periodic chain snapshots via Leap's producer API (`/v1/producer/schedule_snapshot`).
 - **S3 archival**: Streaming backup to S3-compatible storage using rclone with zstd compression.
 - **BTRFS filesystem snapshots**: Consistent full-node backups with minimal downtime (stop → BTRFS snapshot → start → upload from snapshot).
-- **TLS termination**: Caddy reverse proxy with automatic Let's Encrypt certificates.
+- **API gateway**: OpenResty reverse proxy with API key authentication, per-key rate limiting, WebSocket proxy for SHiP, TLS termination, and optional Cloudflare Zero Trust tunnel.
 - **Firewall**: docker-ufw integration for firewall rules that work with Docker's iptables.
 - **Monitoring**: Webhook alerts (Slack, Discord, PagerDuty, generic) and Prometheus metrics endpoint.
 - **Logging profiles**: production, standard, debug, minimal — applied via JSON logging config.
@@ -84,6 +86,9 @@ libre-node/
 │   └── templates/                 # Config generation templates
 │       ├── config.ini.tmpl
 │       ├── docker-compose.yml.tmpl
+│       ├── nginx.conf.tmpl        # OpenResty gateway template
+│       ├── lua/
+│       │   └── auth.lua           # API key auth + rate limiting
 │       └── logging-{production,standard,debug,minimal}.json
 ├── docker/
 │   ├── Dockerfile                 # Node image (Ubuntu 22.04 + Leap v5.0.3)
@@ -92,7 +97,8 @@ libre-node/
 │   ├── setup/
 │   │   ├── wizard.sh             # Interactive configuration wizard
 │   │   ├── generate-config.sh    # Template-based config generator
-│   │   └── validate-config.sh    # Configuration validator
+│   │   ├── validate-config.sh    # Configuration validator
+│   │   └── manage-keys.sh        # API key CRUD (add, remove, list, rotate, reload)
 │   ├── node/
 │   │   ├── start.sh              # Start node (builds image, restores snapshot if needed)
 │   │   ├── stop.sh               # Graceful shutdown with process polling
@@ -222,7 +228,7 @@ All settings live in `node.conf` as `KEY=value` pairs. The wizard sets all of th
 | Key | Description |
 |-----|-------------|
 | `S3_ENABLED` | Enable S3 backup (`true`/`false`) |
-| `TLS_ENABLED` | Enable Caddy TLS termination |
+| `API_GATEWAY_ENABLED` | Enable OpenResty API gateway |
 | `FIREWALL_ENABLED` | Enable docker-ufw firewall rules |
 | `WEBHOOK_ENABLED` | Enable webhook alerts |
 | `PROMETHEUS_ENABLED` | Enable Prometheus metrics endpoint |
