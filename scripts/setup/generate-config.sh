@@ -79,7 +79,6 @@ SHIP_PORT="$(get_config SHIP_PORT "")"
 STORAGE_PATH="$(get_config STORAGE_PATH)"
 STATE_IN_MEMORY="$(get_config STATE_IN_MEMORY "false")"
 STATE_TMPFS_SIZE="$(get_config STATE_TMPFS_SIZE "")"
-BLOCKS_TMPFS_SIZE="$(get_config BLOCKS_TMPFS_SIZE "")"
 SNAPSHOT_INTERVAL="$(get_config SNAPSHOT_INTERVAL)"
 SNAPSHOT_RETENTION="$(get_config SNAPSHOT_RETENTION)"
 LOG_PROFILE="$(get_config LOG_PROFILE "production")"
@@ -308,17 +307,18 @@ NODEOS_COMMAND="      nodeos
       --data-dir /opt/eosio/data
       --genesis-json /opt/eosio/config/genesis.json"
 
-# Build TMPFS_VOLUMES
+# Build TMPFS_VOLUMES (state only — blocks are sequential writes, SSD-safe)
 TMPFS_BLOCK=""
 if [[ "$STATE_IN_MEMORY" == "true" ]]; then
+    # Auto-calculate from CHAIN_STATE_DB_SIZE if STATE_TMPFS_SIZE not explicitly set
+    if [[ -z "$STATE_TMPFS_SIZE" ]]; then
+        STATE_TMPFS_SIZE="$(calc_state_tmpfs_size "$CHAIN_STATE_DB_SIZE")"
+        log_info "Auto-calculated STATE_TMPFS_SIZE=${STATE_TMPFS_SIZE} from CHAIN_STATE_DB_SIZE=${CHAIN_STATE_DB_SIZE}MB + 10%"
+    fi
     TMPFS_BLOCK="      - type: tmpfs
         target: /opt/eosio/data/state
         tmpfs:
-          size: ${STATE_TMPFS_SIZE}
-      - type: tmpfs
-        target: /opt/eosio/data/blocks
-        tmpfs:
-          size: ${BLOCKS_TMPFS_SIZE}"
+          size: ${STATE_TMPFS_SIZE}"
 fi
 
 # Build HEALTHCHECK

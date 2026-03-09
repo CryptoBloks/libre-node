@@ -526,30 +526,21 @@ section_state_memory() {
     if ask_yes_no "Store chain state in memory (tmpfs)?" "$default_yn"; then
         set_config STATE_IN_MEMORY "true"
 
-        # State tmpfs size
-        local default_state_tmpfs
-        default_state_tmpfs="$(get_default_tmpfs_size "$network")"
-        local prev_state_tmpfs
-        prev_state_tmpfs="$(get_config STATE_TMPFS_SIZE "$default_state_tmpfs")"
-
-        local state_size
-        state_size="$(ask_input "State tmpfs size" "$prev_state_tmpfs")"
-        set_config STATE_TMPFS_SIZE "$state_size"
+        # Auto-calculate tmpfs size from CHAIN_STATE_DB_SIZE + 10% headroom
+        local db_size_mb
+        db_size_mb="$(get_config CHAIN_STATE_DB_SIZE "")"
+        if [[ -n "$db_size_mb" ]]; then
+            local tmpfs_size
+            tmpfs_size="$(calc_state_tmpfs_size "$db_size_mb")"
+            set_config STATE_TMPFS_SIZE "$tmpfs_size"
+            log_info "State tmpfs size auto-set to ${tmpfs_size} (CHAIN_STATE_DB_SIZE ${db_size_mb}MB + 10% headroom)"
+        else
+            log_warn "CHAIN_STATE_DB_SIZE not yet set — tmpfs size will be calculated during config generation."
+        fi
 
         echo ""
         log_warn "With tmpfs, chain state will be lost if the server reboots."
         echo "  Ensure automatic snapshot restore is configured for recovery."
-        echo ""
-
-        # Blocks tmpfs
-        local default_blocks_tmpfs
-        default_blocks_tmpfs="$(get_default_blocks_tmpfs_size)"
-        local prev_blocks_tmpfs
-        prev_blocks_tmpfs="$(get_config BLOCKS_TMPFS_SIZE "$default_blocks_tmpfs")"
-
-        local blocks_size
-        blocks_size="$(ask_input "Blocks tmpfs size" "$prev_blocks_tmpfs")"
-        set_config BLOCKS_TMPFS_SIZE "$blocks_size"
     else
         set_config STATE_IN_MEMORY "false"
     fi

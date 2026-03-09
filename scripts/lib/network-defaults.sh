@@ -258,30 +258,14 @@ get_default_resources() {
 }
 
 # ---------------------------------------------------------------------------
-# get_default_tmpfs_size "network"
-# Returns tmpfs size for in-memory chain state.
+# calc_state_tmpfs_size "chain_state_db_size_mb"
+# Returns tmpfs size string (e.g. "18G") = CHAIN_STATE_DB_SIZE + 10% headroom.
+# tmpfs is allocated on use, so the headroom costs nothing until filled.
 # ---------------------------------------------------------------------------
-get_default_tmpfs_size() {
-    local network="$1"
-
-    case "$network" in
-        mainnet)
-            echo "20G"
-            ;;
-        testnet)
-            echo "18G"
-            ;;
-        *)
-            log_error "Unknown network '${network}'. Expected 'mainnet' or 'testnet'."
-            return 1
-            ;;
-    esac
-}
-
-# ---------------------------------------------------------------------------
-# get_default_blocks_tmpfs_size
-# Returns blocks tmpfs size (same for both networks).
-# ---------------------------------------------------------------------------
-get_default_blocks_tmpfs_size() {
-    echo "4G"
+calc_state_tmpfs_size() {
+    local db_size_mb="$1"
+    # Add 10% headroom, convert to GB (rounded up)
+    local total_mb=$(( db_size_mb + db_size_mb / 10 ))
+    local total_gb=$(( (total_mb + 1023) / 1024 ))
+    echo "${total_gb}G"
 }

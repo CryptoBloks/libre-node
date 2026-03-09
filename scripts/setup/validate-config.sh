@@ -160,8 +160,8 @@ fi
 
 # Conditional feature keys
 if [[ "$STATE_IN_MEMORY" == "true" ]]; then
-    require_key "STATE_TMPFS_SIZE"
-    require_key "BLOCKS_TMPFS_SIZE"
+    # STATE_TMPFS_SIZE is optional — auto-calculated from CHAIN_STATE_DB_SIZE if absent
+    :
 fi
 
 if [[ "$S3_ENABLED" == "true" ]]; then
