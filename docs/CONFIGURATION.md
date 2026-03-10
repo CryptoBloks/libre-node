@@ -49,9 +49,9 @@ tmpfs is allocated on actual use, not reserved. A 22GB tmpfs with 10GB used only
 
 | Key | Required | Description | Default |
 |-----|----------|-------------|---------|
-| `SNAPSHOT_INTERVAL` | Yes | Blocks between snapshots | `1000` |
-| `SNAPSHOT_RETENTION` | Yes | Number of snapshots to keep | `5` |
-| `CUSTOM_SNAPSHOT_URL` | No | URL for snapshot restore fallback | |
+| `SNAPSHOT_INTERVAL` | Yes | Blocks between EOSIO snapshots | `1000` |
+| `SNAPSHOT_RETENTION` | Yes | Number of local snapshots to keep | `5` |
+| `CUSTOM_SNAPSHOT_URL` | No | URL for snapshot restore fallback (used by `restore.sh` auto-detect) | |
 
 ## Operational Settings
 
@@ -87,6 +87,7 @@ Required when `NODE_ROLE=light-api`:
 | `S3_BUCKET` | Yes | S3 bucket name |
 | `S3_PREFIX` | Yes | Path prefix in bucket |
 | `S3_ARCHIVE_TYPE` | Yes | `full` or `snapshots` |
+| `BACKUP_RETENTION` | No | Number of remote backups to retain (default: `7`, used by `s3-prune.sh`) |
 
 ## API Gateway (OpenResty)
 
